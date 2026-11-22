@@ -1,0 +1,54 @@
+## Contexto
+
+Al dia de hoy utilizo una planilla de google sheets para mantener el registro de los gastos familiares y la repartición entre los contribuyentes de ingresos a la casa.
+
+Mes a mes, cada contribuyente ingresa cuanto dinero ganó, y se arma el pool de ingresos. Según la participación es cuanto dinero corresponde poner en los gastos comunes. Ejemplo: si mi propio ingreso representa el 65% del total de ingresos, me corresponde pagar el 65% de todos los gastos familiares en el mes, si puse de mas alguien tendrá que devolverme, si puse de menos me corresponderá darle plata a alguien. Ese resumen debe mostrarse al “cerrar el mes” Como los contribuyentes reciben sus ingresos en distintos dias, entre todos decidimos cuando “cerrar” un mes y empezar el siguiente. Al cerrar el mes, la planilla computa todos los ingresos y los gastos de todos, y se determina si alguien tiene que devolverle dinero a otro. Se arranca el siguiente mes desde cero.
+
+Cada gasto que se ingresa entonces contiene una descripción, un monto, quien es el que pago, y una categoría de una lista previamente designada (casa, auto, compras, etc). Con las categorías se busca que al cerrar el mes, ademas de entender si alguien le debe dinero a otro, hacer un pequeño análisis de gastos y poder tomar decisiones de economía familiar.
+
+De esta forma, la planilla de google sheets tiene una pestaña que es una tabla con estas columnas que te mencioné (fecha, descripción, monto, quien pago, categoría).
+
+Sin embargo, existe otra pestaña que es básicamente lo mismo pero para gastos fijos. Donde ya la descripción y la categoría esta previamente completada e inamovible, por ejemplo alquiler y expensas con categoría casa, luz gas y agua con categoría servicios. Solo falta completar quien pago y cuanto, y al cerrar el mes solo esos dos campos se reestablecen. Esto se decidió asi para no olvidarse de completar estos gastos fijos antes de cerrar el mes. De nada sirve cerrar el periodo si nadie pago la factura de electricidad. La regla es que no se puede cerrar el mes sin que todos los gastos fijos tengan un pagador y un monto. 
+
+Existe también una tercera pestaña con una tabla muy similar, con algunas columnas de mas. En esta tabla se completan gastos que se hayan realizado en cuotas. En esta tabla se carga el valor total y la cantidad de cuotas. De esta forma mes a mas se le asigna al pagador la fracción correspondiente. Si yo compro una heladera de $120 mil en 12 cuotas, cada mes se me atribuye un gasto de $10 mil y cada cierre de periodo resta 1 a la cuenta de cuotas restantes. Cuando el contador llega a cero, se elimina ese ítem de la lista de gastos cuotificados. Estos gastos también tienen asignada categoría, descripción, etc.
+
+Finalmente existe la pestaña de resumen. En esta pestaña se muestran los totales de cada categoría, un gráfico de torta indicando el % de cada una frente al total de ingresos, y cuanto % queda restante para ahorro y vida. 
+Esta pestaña muestra ademas el historial de resúmenes de cada mes cerrado, en un gráfico que intenta mostrar la evolución mes a mes de los % de cada categoría por sobre el total de ingresos.
+Por ultimo esta pestaña muestra cuando dinero puso cada uno y cuanto le corresponde pagar en el mes en curso. Cuando nos hacemos todas las devoluciones, le damos al botón cerrar.
+
+Ese botón cerrar guarda todo el resumen de mes en el historial de resúmenes, borra todos los gastos de la pestaña de gastos del mes, solo los montos y pagadores de la de gastos fijos, y decremento la cuenta de cuotas en los gastos cuotificados. También restablece los ingresos.
+
+No se puede cerrar el mes hasta tanto y en cuanto todos los miembros hayan cargado al menos un ingreso, y esten todos los fijos completados.
+
+No quiero olvidar decirte que a veces un gasto se carga con un monto negativo, cuando alguien recibe una devolución o compensación. En la matemáticatica resultó coherente.
+
+## Necesidad
+
+Es difícil luego de hacer un gasto, quizas estando en la calle meterse en en un google sheets a cargar todos los datos de un gasto. Dejarlo para después puede llevar a olvidos.
+
+Tenemos que armar una web app (de esas que se pueden abrir en el celular con safari o chrome y guardarse un acceso directo en la pantalla principal como web app) que haga todo lo que este google sheets hace.
+
+Me gustaria que revises el estado del arte de las apps actuales existentes de división de gastos (como splitwise, tricount, etc) para llevarte de ahi ux/ui e ideas para que esta app nuestra sea buena de usar. Se prioriza que sea minimalista y ágil de usar a la hora de cargar un gasto. Que al tocar el icono el bicho rápido te pida una descripción, un monto, si es en cuotas cuantas, categoría y quien paga, teniendo como default mi propio usuario pero yo poder poner que pago otro del grupo.
+Tiene que ser rápido y fácil cargar un gasto, sin fricciones que lleven a un usuario a “despues lo cargo”
+En otro sector visualizar los gastos fijos y entender cual falta completar para poder cerrar el mes. Que el botón de cerrar mes no te deje avanzar si existen gastos fijos sin completar.
+Poder ver claramente la situación del mes en curso, ver los gastos guardados, poder editarlos si se cometió un error de tipeo, cuántas cuotas le faltan pagar a un gasto.
+En otra parte poder consultar historial, visualizar la evolución de las categorías mes a mes.
+
+Si bien esta app la estoy pensando para mi grupo actual, quiero pensarla desde cero para poder ser distribuida, entonces en el apartado de configuración quiero que un miembro del grupo pueda editar la lista de categorías para agregar o eliminar. Mismo agregar o eliminar gastos fijos.
+
+Resolver la gestión de usuarios y como se arman grupos y se invitan/eliminan usuarios de un grupo. No existe aca rango de admin y participantes comunes. Todos tenemos acceso a todo y poder de todo.
+
+Cuando alguien agrega un gasto (sea fijo, del mes, o en cuotas) los demás integrantes reciban una notificación con el dato. Al cerrar el mes la notificación debe decirle a cada usuario cuanto tiene que recuperar o devolver.
+Bonus points si la app también indica quien le tiene que dar a quien y cuanto.
+
+## Datos extra
+
+Actualmente tengo una cuenta gratuita en supabase, por un proyecto anterior, quizas hay cosas que podemos resolver con esa herramienta. También podes proponer utilizar otras, pero siempre tiene que ser un tier gratuito. Entiendo que no estamos haciendo una app para la NASA y tiers gratuitos de herramientas potentes son fácilmente aprovechables.
+
+La app debe tener para elegir tema claro y oscuro. Me gustaria que utilices blancos y negros (o cuasi blancos y cuasi negros) para textos y fondos, y gamas de verde para bordes, botones, resaltado, y demás.
+
+No hace falta que la URL de la app sea algo tan prolijo. de todos modos al guardarla en el teléfono como web app uno se olvida de esa URL.
+
+La app se va a llamar BaroB. Que las dos B sean mayusculas te dan un indicio de como me gustaria que sea el icono, el logo, la identidad de marca en general. Podes usar esas dos B enfrentadas, espejadas, como quieras. Tiene que ser visualmente tranquilo, nada cargado. Mismo la app, no hace falta ser minimalista pero no tan cargado.
+
+
