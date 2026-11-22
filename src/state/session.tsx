@@ -7,6 +7,11 @@ import type { Group, Profile } from '../lib/types'
 interface SessionCtx {
   session: Session | null
   loading: boolean
+  /** true si se entró por el link de recuperación de contraseña */
+  recovery: boolean
+  endRecovery: () => void
+  /** error que vino en un link de Supabase (p.ej. vencido) */
+  linkError: string | null
   userId: string | null
   profile: Profile | null
   groups: Group[]
@@ -19,6 +24,16 @@ interface SessionCtx {
 const Ctx = createContext<SessionCtx | null>(null)
 const GROUP_KEY = 'barob.group'
 
+// Links de Supabase (p.ej. "olvidé mi contraseña") vuelven con #access_token=…&type=recovery.
+// Lo leemos antes de que el router use el hash y limpiamos la URL.
+const authParams = (() => {
+  const h = window.location.hash
+  if (!/access_token=|error_description=/.test(h)) return null
+  const p = new URLSearchParams(h.replace(/^#\/?/, ''))
+  window.history.replaceState(null, '', `${window.location.pathname}#/`)
+  return p
+})()
+
 function readStored(): string | null {
   try {
     return localStorage.getItem(GROUP_KEY)
@@ -30,14 +45,22 @@ function readStored(): string | null {
 export function SessionProvider({ children }: { children: ReactNode }) {
   const [session, setSession] = useState<Session | null>(null)
   const [loading, setLoading] = useState(true)
+  const [recovery, setRecovery] = useState(false)
   const [groupId, setGroupId] = useState<string | null>(readStored)
   const qc = useQueryClient()
 
   useEffect(() => {
-    supabase.auth.getSession().then(({ data }) => {
+    ;(async () => {
+      const at = authParams?.get('access_token')
+      const rt = authParams?.get('refresh_token')
+      if (at && rt) {
+        const { data } = await supabase.auth.setSession({ access_token: at, refresh_token: rt })
+        if (data.session && authParams?.get('type') === 'recovery') setRecovery(true)
+      }
+      const { data } = await supabase.auth.getSession()
       setSession(data.session)
       setLoading(false)
-    })
+    })()
     const { data } = supabase.auth.onAuthStateChange((_e, s) => {
       setSession(s)
       if (!s) qc.clear()
@@ -82,6 +105,11 @@ export function SessionProvider({ children }: { children: ReactNode }) {
   const value: SessionCtx = {
     session,
     loading,
+    recovery,
+    endRecovery: () => setRecovery(false),
+    linkError: authParams?.get('error_description')
+      ? 'El link venció o ya se usó. Pedí uno nuevo desde «¿Olvidaste tu contraseña?».'
+      : null,
     userId,
     profile: profileQ.data ?? null,
     groups,

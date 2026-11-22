@@ -14,6 +14,7 @@ import Join from './screens/Join'
 import Login from './screens/Login'
 import Month from './screens/Month'
 import Onboarding from './screens/Onboarding'
+import ResetPassword from './screens/ResetPassword'
 import Settings from './screens/Settings'
 import Setup from './screens/Setup'
 
@@ -41,7 +42,7 @@ function Start() {
 }
 
 export default function App() {
-  const { session, loading, groups, groupsLoading, group } = useSession()
+  const { session, loading, groups, groupsLoading, group, recovery, endRecovery } = useSession()
   const loc = useLocation()
   const nav = useNavigate()
 
@@ -61,6 +62,7 @@ export default function App() {
   if (!configured) return <Setup />
   if (loading || groupsLoading) return <div className="center-screen"><Spinner /></div>
   if (!session) return <Login />
+  if (recovery) return <ResetPassword onDone={endRecovery} />
 
   if (joinMatch) return <Routes><Route path="/join/:code" element={<Join />} /></Routes>
   if (!groups.length || !group) return <Onboarding />

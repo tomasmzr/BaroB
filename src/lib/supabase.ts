@@ -15,7 +15,10 @@ export function errorText(e: unknown): string {
   if (msg.includes('invite_invalid')) return 'La invitación no existe o venció.'
   if (msg.includes('cannot_close')) return 'Todavía hay cosas pendientes para cerrar el mes.'
   if (msg.includes('row-level security')) return 'No se puede modificar: el mes ya está cerrado o no tenés acceso.'
-  if (msg.includes('Token has expired') || msg.includes('otp_expired')) return 'El código venció o es incorrecto.'
+  if (msg.includes('Invalid login credentials')) return 'Email o contraseña incorrectos.'
+  if (msg.includes('already registered')) return 'Ya hay una cuenta con ese email. Probá en «Entrar».'
+  if (msg.includes('Password should be')) return 'La contraseña tiene que tener al menos 6 caracteres.'
+  if (msg.includes('Token has expired') || msg.includes('otp_expired')) return 'El link venció. Pedí uno nuevo.'
   if (msg.includes('rate limit')) return 'Demasiados intentos. Esperá unos minutos.'
   return msg
 }

@@ -1,71 +1,108 @@
 import { useState, type FormEvent } from 'react'
 import { LogoMark, Wordmark } from '../components/ui'
 import { errorText, supabase } from '../lib/supabase'
+import { useSession } from '../state/session'
+
+type Mode = 'signin' | 'signup' | 'forgot'
 
 export default function Login() {
+  const [mode, setMode] = useState<Mode>('signin')
   const [email, setEmail] = useState('')
-  const [code, setCode] = useState('')
-  const [step, setStep] = useState<'email' | 'code'>('email')
+  const [password, setPassword] = useState('')
+  const [name, setName] = useState('')
   const [busy, setBusy] = useState(false)
-  const [err, setErr] = useState<string | null>(null)
+  const { linkError } = useSession()
+  const [err, setErr] = useState<string | null>(linkError)
+  const [info, setInfo] = useState<string | null>(null)
 
-  async function sendCode(e?: FormEvent) {
-    e?.preventDefault()
-    setBusy(true)
-    setErr(null)
-    const { error } = await supabase.auth.signInWithOtp({
-      email: email.trim().toLowerCase(),
-      options: { shouldCreateUser: true, emailRedirectTo: window.location.origin + window.location.pathname },
-    })
-    setBusy(false)
-    if (error) setErr(errorText(error))
-    else setStep('code')
-  }
+  const cleanEmail = email.trim().toLowerCase()
 
-  async function verify(e: FormEvent) {
+  async function submit(e: FormEvent) {
     e.preventDefault()
     setBusy(true)
     setErr(null)
-    const { error } = await supabase.auth.verifyOtp({ email: email.trim().toLowerCase(), token: code.trim(), type: 'email' })
-    setBusy(false)
-    if (error) setErr(errorText(error))
+    setInfo(null)
+    try {
+      if (mode === 'signin') {
+        const { error } = await supabase.auth.signInWithPassword({ email: cleanEmail, password })
+        if (error) throw error
+      } else if (mode === 'signup') {
+        const { error } = await supabase.auth.signUp({
+          email: cleanEmail,
+          password,
+          options: { data: { display_name: name.trim() || undefined } },
+        })
+        if (error) throw error
+      } else {
+        const { error } = await supabase.auth.resetPasswordForEmail(cleanEmail, {
+          redirectTo: window.location.origin + window.location.pathname,
+        })
+        if (error) throw error
+        setInfo('Te mandamos un mail con un link para elegir una contraseña nueva. Abrilo, cambiala y después volvé a entrar acá.')
+      }
+    } catch (e) {
+      setErr(errorText(e))
+    } finally {
+      setBusy(false)
+    }
+  }
+
+  const switchTo = (m: Mode) => {
+    setMode(m)
+    setErr(null)
+    setInfo(null)
   }
 
   return (
     <div className="center-screen">
-      <div className="stack" style={{ alignItems: 'center', marginBottom: 32, gap: 14 }}>
+      <div className="stack" style={{ alignItems: 'center', marginBottom: 28, gap: 14 }}>
         <LogoMark size={72} />
         <Wordmark size={30} />
         <p className="muted" style={{ margin: 0, textAlign: 'center' }}>Los gastos de la casa, en proporción a lo que gana cada uno.</p>
       </div>
 
-      {step === 'email' ? (
-        <form className="stack" onSubmit={sendCode}>
-          <div className="field">
-            <label htmlFor="email">Tu email</label>
-            <input id="email" className="input" type="email" autoComplete="email" inputMode="email" required
-              value={email} onChange={(e) => setEmail(e.target.value)} placeholder="nombre@mail.com" />
-          </div>
-          <button className="btn primary block" disabled={busy || !email}>{busy ? 'Enviando…' : 'Recibir código'}</button>
-          <p className="faint small" style={{ textAlign: 'center', margin: 0 }}>Sin contraseñas: te mandamos un código de un solo uso.</p>
-        </form>
-      ) : (
-        <form className="stack" onSubmit={verify}>
-          <p className="muted" style={{ margin: 0 }}>Te mandamos un código a <b>{email}</b>.</p>
-          <div className="field">
-            <label htmlFor="code">Código</label>
-            <input id="code" className="input" inputMode="numeric" autoComplete="one-time-code" maxLength={10} required autoFocus
-              value={code} onChange={(e) => setCode(e.target.value.replace(/\D/g, ''))} placeholder="123456"
-              style={{ fontSize: 24, letterSpacing: '0.3em', textAlign: 'center' }} />
-          </div>
-          <button className="btn primary block" disabled={busy || code.length < 6}>{busy ? 'Verificando…' : 'Entrar'}</button>
-          <div className="between">
-            <button type="button" className="btn ghost sm" onClick={() => { setStep('email'); setCode('') }}>Cambiar email</button>
-            <button type="button" className="btn ghost sm" disabled={busy} onClick={() => sendCode()}>Reenviar</button>
-          </div>
-        </form>
+      {mode !== 'forgot' && (
+        <div className="chips" style={{ justifyContent: 'center', marginBottom: 16 }}>
+          <button type="button" className="chip" aria-pressed={mode === 'signin'} onClick={() => switchTo('signin')}>Entrar</button>
+          <button type="button" className="chip" aria-pressed={mode === 'signup'} onClick={() => switchTo('signup')}>Crear cuenta</button>
+        </div>
       )}
+
+      <form className="stack" onSubmit={submit}>
+        {mode === 'signup' && (
+          <div className="field">
+            <label htmlFor="name">Tu nombre</label>
+            <input id="name" className="input" autoComplete="given-name" value={name} onChange={(e) => setName(e.target.value)} placeholder="Cómo te ven los demás" />
+          </div>
+        )}
+        <div className="field">
+          <label htmlFor="email">Email</label>
+          <input id="email" className="input" type="email" autoComplete="email" inputMode="email" required
+            value={email} onChange={(e) => setEmail(e.target.value)} placeholder="nombre@mail.com" />
+        </div>
+        {mode !== 'forgot' && (
+          <div className="field">
+            <label htmlFor="pw">Contraseña</label>
+            <input id="pw" className="input" type="password" required minLength={6}
+              autoComplete={mode === 'signup' ? 'new-password' : 'current-password'}
+              value={password} onChange={(e) => setPassword(e.target.value)} placeholder={mode === 'signup' ? 'Mínimo 6 caracteres' : ''} />
+          </div>
+        )}
+        <button className="btn primary block" disabled={busy || !email || (mode !== 'forgot' && password.length < 6)}>
+          {busy ? 'Un momento…' : mode === 'signin' ? 'Entrar' : mode === 'signup' ? 'Crear cuenta' : 'Mandarme el link'}
+        </button>
+      </form>
+
       {err && <p className="error">{err}</p>}
+      {info && <p className="muted small">{info}</p>}
+
+      <div style={{ textAlign: 'center', marginTop: 12 }}>
+        {mode === 'forgot' ? (
+          <button className="btn ghost sm" onClick={() => switchTo('signin')}>Volver</button>
+        ) : mode === 'signin' ? (
+          <button className="btn ghost sm" onClick={() => switchTo('forgot')}>¿Olvidaste tu contraseña?</button>
+        ) : null}
+      </div>
     </div>
   )
 }

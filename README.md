@@ -29,7 +29,7 @@ Reemplaza la planilla de Google Sheets: gastos del mes, gastos fijos, gastos en 
 | Pieza | Uso |
 |---|---|
 | React + Vite + TypeScript | Frontend PWA (`vite-plugin-pwa`, service worker propio en `src/sw.ts`) |
-| Supabase Auth | Login sin contraseña con **código por email** (OTP de 6 dígitos) |
+| Supabase Auth | Email + contraseña (sin depender de mails para entrar) |
 | Supabase Postgres + RLS | Datos; cada grupo solo es visible para sus miembros |
 | Supabase Realtime | Los cambios de un miembro aparecen al instante en los demás |
 | Supabase Edge Function `notify` | Envía Web Push a los demás miembros |
@@ -58,13 +58,14 @@ supabase db push
 supabase config push
 ```
 
-`config push` sube la plantilla de email con el código (`supabase/templates/magic_link.html`).
-Alternativa manual: Dashboard → Authentication → Email Templates → "Magic Link", incluir `{{ .Token }}`.
+`config push` sube la configuración de auth (Site URL, confirmación de email desactivada, etc.).
 
-> El SMTP incluido en Supabase permite pocos emails por hora. Para un grupo familiar alcanza
-> (la sesión queda abierta), pero si molesta se puede configurar un SMTP gratuito (Resend, Brevo).
+**Login**: email + contraseña. El plan gratuito de Supabase no permite personalizar los mails con el SMTP
+incluido, así que no se usa login por código. "¿Olvidaste tu contraseña?" manda el mail estándar de Supabase;
+el link puede abrirse en cualquier navegador (en iPhone se abre en Safari): ahí se elige la contraseña nueva y
+después se entra normalmente desde la app instalada.
 
-En Authentication → URL Configuration poné como **Site URL** la URL donde quede publicada la app.
+La Site URL (`auth.site_url` en `supabase/config.toml`) apunta a la app publicada: https://tomasmzr.github.io/BaroB/
 
 ### 2. Notificaciones (Web Push)
 
