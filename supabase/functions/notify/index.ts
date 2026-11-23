@@ -10,7 +10,7 @@ const cors = {
   'Access-Control-Allow-Methods': 'POST, OPTIONS',
 }
 
-type EventType = 'expense' | 'fixed' | 'installment' | 'income' | 'period_closed'
+type EventType = 'expense' | 'fixed' | 'installment' | 'income' | 'period_closed' | 'test'
 interface Payload { title: string; body: string; url: string; tag?: string }
 
 const SUPABASE_URL = Deno.env.get('SUPABASE_URL')!
@@ -44,6 +44,14 @@ Deno.serve(async (req) => {
   const { type, id } = (await req.json()) as { type: EventType; id: string }
   const db = createClient(SUPABASE_URL, SERVICE)
 
+  // Prueba: solo a los dispositivos del que la pide.
+  if (type === 'test') {
+    const sent = await send(db, new Map([[user.id, {
+      title: 'BaroB', body: 'Las notificaciones funcionan en este dispositivo ✓', url: '#/settings', tag: 'test',
+    }]]))
+    return json({ sent })
+  }
+
   // 1) Resolver grupo del evento
   const table = type === 'installment' ? 'installment_plans' : type === 'income' ? 'incomes'
     : type === 'period_closed' ? 'periods' : 'expenses'
@@ -75,7 +83,7 @@ Deno.serve(async (req) => {
       let body = 'Estás al día, no hay que pasar plata.'
       if (me && me.balance > 0.005) body = `Te tienen que devolver ${money(me.balance, cur)}. ${gets.join(' · ')}`
       else if (me && me.balance < -0.005) body = `Tenés que poner ${money(-me.balance, cur)}: ${gives.join(' · ')}`
-      messages.set(uid, { title: `${group?.name}: mes ${row.number} cerrado`, body, url: `#/history/${row.id}`, tag: `close-${row.id}` })
+      messages.set(uid, { title: `${group?.name}: ${monthName(row.month) ?? `mes ${row.number}`} cerrado`, body, url: `#/history/${row.id}`, tag: `close-${row.id}` })
     }
   } else {
     let p: Payload
@@ -95,11 +103,15 @@ Deno.serve(async (req) => {
     for (const uid of recipients) messages.set(uid, p)
   }
 
-  // 3) Enviar
-  if (!messages.size) return json({ sent: 0 })
+  return json({ sent: await send(db, messages) })
+})
+
+// deno-lint-ignore no-explicit-any
+async function send(db: any, messages: Map<string, Payload>): Promise<number> {
+  if (!messages.size) return 0
   const { data: subs } = await db.from('push_subscriptions').select('id, user_id, endpoint, p256dh, auth').in('user_id', [...messages.keys()])
   let sent = 0
-  await Promise.all((subs ?? []).map(async (s) => {
+  await Promise.all((subs ?? []).map(async (s: { id: string; user_id: string; endpoint: string; p256dh: string; auth: string }) => {
     try {
       await webpush.sendNotification(
         { endpoint: s.endpoint, keys: { p256dh: s.p256dh, auth: s.auth } },
@@ -113,5 +125,12 @@ Deno.serve(async (req) => {
       else console.error('push error', code, (e as Error).message)
     }
   }))
-  return json({ sent })
-})
+  return sent
+}
+
+function monthName(month?: string | null): string | null {
+  if (!month) return null
+  const t = new Intl.DateTimeFormat('es-AR', { month: 'long', year: 'numeric', timeZone: 'UTC' })
+    .format(new Date(`${month.slice(0, 10)}T12:00:00Z`)).replace(' de ', ' ')
+  return t.charAt(0).toUpperCase() + t.slice(1)
+}

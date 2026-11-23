@@ -53,3 +53,11 @@ export function installmentAmount(total: number, n: number, k: number): number {
 export function initials(name: string): string {
   return name.trim().split(/\s+/).slice(0, 2).map((w) => w[0]?.toUpperCase() ?? '').join('') || '?'
 }
+
+const periodFmt = new Intl.DateTimeFormat('es-AR', { month: 'long', year: 'numeric' })
+/** "2026-11-01" → "Noviembre 2026" */
+export function periodName(month: string | null | undefined, fallbackNumber?: number): string {
+  if (!month) return fallbackNumber ? `Mes ${fallbackNumber}` : 'Mes'
+  const t = periodFmt.format(toDate(month.slice(0, 10))).replace(' de ', ' ')
+  return t.charAt(0).toUpperCase() + t.slice(1)
+}

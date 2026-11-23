@@ -1,5 +1,6 @@
 import { useEffect } from 'react'
 import { Navigate, NavLink, Outlet, Route, Routes, useLocation, useNavigate } from 'react-router-dom'
+import Tour from './components/Tour'
 import { Icon, Spinner } from './components/ui'
 import { configured } from './lib/supabase'
 import { prefs } from './lib/prefs'
@@ -25,6 +26,7 @@ function Shell() {
   return (
     <>
       <Outlet />
+      <Tour />
       <nav className="nav" aria-label="Navegación">
         <NavLink to="/" end><Icon name="home" />Mes</NavLink>
         <NavLink to="/fixed"><Icon name="pin" />Fijos</NavLink>
@@ -70,8 +72,8 @@ export default function App() {
   return (
     <Routes>
       <Route path="/start" element={<Start />} />
-      <Route path="/add" element={<AddExpense />} />
       <Route element={<Shell />}>
+        <Route path="/add" element={<AddExpense />} />
         <Route path="/" element={<Month />} />
         <Route path="/fixed" element={<Fixed />} />
         <Route path="/close" element={<CloseMonth />} />

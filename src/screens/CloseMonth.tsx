@@ -2,7 +2,7 @@ import { useState } from 'react'
 import { Link, useNavigate } from 'react-router-dom'
 import SummaryView from '../components/SummaryView'
 import { Icon, Sheet, Spinner, useToast } from '../components/ui'
-import { money } from '../lib/format'
+import { money, periodName } from '../lib/format'
 import { notify } from '../lib/push'
 import { errorText, supabase } from '../lib/supabase'
 import { useBlockers, useFixed, useInvalidate, useNames, useOpenPeriod, useSummary } from '../state/data'
@@ -26,7 +26,9 @@ export default function CloseMonth() {
   const s = summary.data
   const b = blockers.data
   const missingFixed = fixed.filter((f) => b?.missing_fixed.includes(f.id))
-  const canClose = !!b && !b.missing_fixed.length && !b.missing_incomes.length && !!s && s.total_income > 0
+  const equal = group.split_mode === 'equal'
+  const canClose = !!b && !b.missing_fixed.length && !b.missing_incomes.length && !!s && (equal || s.total_income > 0)
+  const pname = periodName(period.month, period.number)
 
   async function close() {
     setBusy(true)
@@ -47,7 +49,7 @@ export default function CloseMonth() {
     <div className="page">
       <div className="top">
         <button className="icon-btn" onClick={() => nav(-1)} aria-label="Volver"><Icon name="back" /></button>
-        <h1 style={{ fontSize: 18 }}>Mes {period.number} · Resumen</h1>
+        <h1 style={{ fontSize: 18 }}>{pname} · Resumen</h1>
         <span style={{ width: 40 }} />
       </div>
 
@@ -64,7 +66,7 @@ export default function CloseMonth() {
               <Icon name="pin" size={18} /> {f.description}
             </Link>
           ))}
-          {s && s.total_income <= 0 && !b.missing_incomes.length && <span className="small">El total de ingresos tiene que ser mayor a cero.</span>}
+          {s && !equal && s.total_income <= 0 && !b.missing_incomes.length && <span className="small">El total de ingresos tiene que ser mayor a cero.</span>}
         </div>
       )}
 
@@ -72,7 +74,7 @@ export default function CloseMonth() {
 
       <div style={{ marginTop: 24 }}>
         <button className="btn primary block" disabled={!canClose} onClick={() => setConfirming(true)} style={{ height: 54 }}>
-          Cerrar mes {period.number}
+          Cerrar {pname}
         </button>
         <p className="small faint" style={{ textAlign: 'center' }}>
           Cerralo cuando ya se hicieron las devoluciones. Se guarda en el historial, se vacían gastos e ingresos,
@@ -80,7 +82,7 @@ export default function CloseMonth() {
         </p>
       </div>
 
-      <Sheet open={confirming} onClose={() => setConfirming(false)} title={`¿Cerrar el mes ${period.number}?`}>
+      <Sheet open={confirming} onClose={() => setConfirming(false)} title={`¿Cerrar ${pname}?`}>
         <div className="stack">
           <p className="muted" style={{ margin: 0 }}>No se puede deshacer. Todos van a recibir una notificación con lo que les toca recuperar o poner.</p>
           {err && <p className="error">{err}</p>}

@@ -1,4 +1,4 @@
-import { createContext, useCallback, useContext, useEffect, useState, type ReactNode } from 'react'
+import { createContext, useCallback, useContext, useEffect, useState, type CSSProperties, type ReactNode } from 'react'
 import { initials, money } from '../lib/format'
 import type { Category, Member } from '../lib/types'
 
@@ -70,9 +70,40 @@ export function Money({ value, currency, className = '' }: { value: number; curr
 }
 
 /* ---------- Sheet ---------- */
+
+/**
+ * Caja visible para una hoja emergente: sigue al viewport visible (en iOS el teclado no achica
+ * la página, así que sin esto el teclado tapa la hoja) y deja libre la barra inferior.
+ */
+function useVisibleBox(active: boolean): CSSProperties {
+  const [box, setBox] = useState<CSSProperties>({ height: '100%' })
+  useEffect(() => {
+    if (!active) return
+    const vv = window.visualViewport
+    const update = () => {
+      const h = vv?.height ?? window.innerHeight
+      const top = vv?.offsetTop ?? 0
+      const keyboard = window.innerHeight - h > 120
+      const nav = keyboard ? 0 : (document.querySelector('.nav')?.getBoundingClientRect().height ?? 0)
+      setBox({ top, height: Math.max(200, h - nav) })
+    }
+    update()
+    vv?.addEventListener('resize', update)
+    vv?.addEventListener('scroll', update)
+    window.addEventListener('resize', update)
+    return () => {
+      vv?.removeEventListener('resize', update)
+      vv?.removeEventListener('scroll', update)
+      window.removeEventListener('resize', update)
+    }
+  }, [active])
+  return box
+}
+
 export function Sheet({ open, onClose, children, title }: {
   open: boolean; onClose: () => void; children: ReactNode; title?: string
 }) {
+  const box = useVisibleBox(open)
   useEffect(() => {
     if (!open) return
     const onKey = (e: KeyboardEvent) => e.key === 'Escape' && onClose()
@@ -85,13 +116,13 @@ export function Sheet({ open, onClose, children, title }: {
   }, [open, onClose])
   if (!open) return null
   return (
-    <div className="backdrop" onClick={onClose}>
+    <div className="backdrop" style={box} onClick={onClose}>
       <div className="sheet" role="dialog" aria-modal="true" aria-label={title} onClick={(e) => e.stopPropagation()}>
         <div className="grab" />
         {title && (
           <div className="between" style={{ marginBottom: 12 }}>
             <h2 style={{ margin: 0, fontSize: 18 }}>{title}</h2>
-            <button className="icon-btn" onClick={onClose} aria-label="Cerrar"><Icon name="close" /></button>
+            <button className="icon-btn close-btn" onClick={onClose} aria-label="Cerrar"><Icon name="close" size={20} /></button>
           </div>
         )}
         {children}

@@ -2,7 +2,7 @@ import { useState } from 'react'
 import { useNavigate, useParams } from 'react-router-dom'
 import SummaryView from '../components/SummaryView'
 import { Icon, Money, Spinner } from '../components/ui'
-import { shortDate } from '../lib/format'
+import { periodName, shortDate } from '../lib/format'
 import { useCategories, useExpenses, useHistory, useNames } from '../state/data'
 import { useGroup } from '../state/session'
 
@@ -25,7 +25,7 @@ export default function HistoryDetail() {
       <div className="top">
         <button className="icon-btn" onClick={() => nav('/history')} aria-label="Volver"><Icon name="back" /></button>
         <div style={{ textAlign: 'center' }}>
-          <h1 style={{ fontSize: 18 }}>Mes {p.number}</h1>
+          <h1 style={{ fontSize: 18 }}>{periodName(p.month, p.number)}</h1>
           <div className="sub">{shortDate(p.started_at)} → {shortDate(p.closed_at!)}</div>
         </div>
         <span style={{ width: 40 }} />

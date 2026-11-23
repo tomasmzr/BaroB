@@ -102,7 +102,7 @@ export function useOpenPeriod() {
     queryKey: [group.id, 'period'],
     queryFn: () =>
       rows<Period>(
-        supabase.from('periods').select('id, group_id, number, started_at, closed_at').eq('group_id', group.id)
+        supabase.from('periods').select('id, group_id, number, month, started_at, closed_at').eq('group_id', group.id)
           .is('closed_at', null).single(),
       ),
   })

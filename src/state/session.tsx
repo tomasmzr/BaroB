@@ -84,7 +84,7 @@ export function SessionProvider({ children }: { children: ReactNode }) {
     queryKey: ['groups', userId],
     enabled: !!userId,
     queryFn: async () => {
-      const { data, error } = await supabase.from('groups').select('id, name, currency').order('created_at')
+      const { data, error } = await supabase.from('groups').select('id, name, currency, split_mode, split_min, split_max').order('created_at')
       if (error) throw error
       return data as Group[]
     },

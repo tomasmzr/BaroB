@@ -6,10 +6,15 @@ export interface Profile {
   email: string | null
 }
 
+export type SplitMode = 'proportional' | 'proportional_capped' | 'equal'
+
 export interface Group {
   id: UUID
   name: string
   currency: string
+  split_mode: SplitMode
+  split_min: number | null
+  split_max: number | null
 }
 
 export interface Member {
@@ -40,6 +45,8 @@ export interface Period {
   id: UUID
   group_id: UUID
   number: number
+  /** primer día del mes que nombra al período (YYYY-MM-01) */
+  month: string
   started_at: string
   closed_at: string | null
   summary: Summary | null
@@ -77,6 +84,7 @@ export interface InstallmentPlan {
   total_amount: number
   installments_total: number
   installments_paid: number
+  spent_at: string
   finished_at: string | null
   created_at: string
 }
@@ -86,11 +94,17 @@ export interface SummaryMember {
   name: string
   income: number
   paid: number
+  /** fracción 0..1 del total que le toca */
+  ratio?: number
   share: number
   balance: number
 }
 
 export interface Summary {
+  month?: string
+  split_mode?: SplitMode
+  split_min?: number | null
+  split_max?: number | null
   total_income: number
   total_expenses: number
   savings: number

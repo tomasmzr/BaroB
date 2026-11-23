@@ -30,7 +30,7 @@ export default function Onboarding() {
     setErr(null)
     try {
       await saveName()
-      const { data, error } = await supabase.rpc('create_group', { p_name: groupName.trim() || 'Casa' })
+      const { data, error } = await supabase.rpc('create_group', { p_name: groupName.trim() || 'Casa', p_timezone: Intl.DateTimeFormat().resolvedOptions().timeZone })
       if (error) throw error
       selectGroup(data as string)
       await refreshGroups()

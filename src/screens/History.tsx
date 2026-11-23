@@ -2,7 +2,7 @@ import { useMemo, useState } from 'react'
 import { Link } from 'react-router-dom'
 import { CartesianGrid, Legend, Line, LineChart, ResponsiveContainer, Tooltip, XAxis, YAxis } from 'recharts'
 import { Icon, Spinner } from '../components/ui'
-import { money, monthLabel, pct, shortDate } from '../lib/format'
+import { money, monthLabel, pct, periodName, shortDate } from '../lib/format'
 import { useHistory } from '../state/data'
 import { useGroup } from '../state/session'
 
@@ -16,8 +16,9 @@ export default function History() {
     const colors = new Map<string, string>()
     const rows = periods.map((p) => {
       const s = p.summary!
-      const row: Record<string, number | string> = { label: monthLabel(p.closed_at!) }
-      const base = s.total_income || 1
+      const row: Record<string, number | string> = { label: monthLabel(p.month ?? p.closed_at!) }
+      // con excedente, las categorías se miden sobre el total de gastos
+      const base = Math.max(s.total_income, s.total_expenses) || 1
       for (const c of s.categories) {
         colors.set(c.name, c.color)
         row[c.name] = Math.round((c.total / base) * 1000) / 10
@@ -44,7 +45,7 @@ export default function History() {
         <>
           {data.length >= 1 && (
             <div className="card" style={{ padding: '16px 8px 8px 0' }}>
-              <div className="small muted" style={{ paddingLeft: 16, marginBottom: 8 }}>% de los ingresos por categoría</div>
+              <div className="small muted" style={{ paddingLeft: 16, marginBottom: 8 }}>% por categoría sobre ingresos (o gastos, si se excedieron)</div>
               <div style={{ height: 240 }}>
                 <ResponsiveContainer>
                   <LineChart data={data} margin={{ left: 0, right: 12 }}>
@@ -77,13 +78,13 @@ export default function History() {
             {list.map((p) => (
               <Link key={p.id} to={`/history/${p.id}`} className="item" style={{ color: 'inherit' }}>
                 <div className="grow">
-                  <div className="title">Mes {p.number}</div>
+                  <div className="title">{periodName(p.month, p.number)}</div>
                   <div className="meta">{shortDate(p.started_at)} → {shortDate(p.closed_at!)}</div>
                 </div>
                 {p.summary && (
                   <div style={{ textAlign: 'right' }}>
                     <div className="amount">{money(p.summary.total_expenses, group.currency)}</div>
-                    <div className="meta">Quedó {pct(p.summary.savings, p.summary.total_income)}</div>
+                    <div className={`meta ${p.summary.savings < 0 ? 'over-text' : ''}`}>{p.summary.savings < 0 ? `Excedido ${pct(-p.summary.savings, p.summary.total_income)}` : `Quedó ${pct(p.summary.savings, p.summary.total_income)}`}</div>
                   </div>
                 )}
                 <Icon name="chevron" size={18} />

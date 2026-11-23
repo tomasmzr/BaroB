@@ -1,14 +1,40 @@
 import { useMemo, useState } from 'react'
 import { Link } from 'react-router-dom'
 import ExpenseForm from '../components/ExpenseForm'
+import { GroupPicker } from '../components/GroupPicker'
 import IncomeSheet from '../components/IncomeSheet'
 import { Avatar, Icon, Money, Sheet, Spinner } from '../components/ui'
-import { dayLabel, installmentAmount, money, pct, shortDate } from '../lib/format'
-import type { Expense, InstallmentPlan } from '../lib/types'
+import { dayLabel, installmentAmount, money, pct, periodName, shortDate } from '../lib/format'
+import type { Expense, Income, InstallmentPlan, Summary } from '../lib/types'
 import {
   useBlockers, useCategories, useExpenses, useFixed, useIncomes, useMembers, useNames, useOpenPeriod, usePlans, useSummary,
 } from '../state/data'
 import { useGroup } from '../state/session'
+
+/** Barra de gasto sobre ingresos. Si se pasan, el excedente se pinta en rojo. */
+export function SpendBar({ s, currency }: { s: Summary; currency: string }) {
+  if (s.total_income <= 0) return null
+  const over = s.total_expenses > s.total_income
+  const greenW = over ? (s.total_income / s.total_expenses) * 100 : (s.total_expenses / s.total_income) * 100
+  return (
+    <div style={{ marginTop: 10 }}>
+      <div className="bar">
+        <span style={{ width: `${Math.max(0, greenW)}%`, borderRadius: over ? '99px 0 0 99px' : undefined }} />
+        {over && <span className="bar-over" style={{ width: `${100 - greenW}%` }} />}
+      </div>
+      <div className="between small" style={{ marginTop: 6 }}>
+        {over ? (
+          <span className="over-text">Gastos superan ingresos en {money(s.total_expenses - s.total_income, currency)} (+{pct(s.total_expenses - s.total_income, s.total_income)})</span>
+        ) : (
+          <>
+            <span className="muted">{pct(s.total_expenses, s.total_income)} de los ingresos</span>
+            <span className="muted">Queda {pct(s.savings, s.total_income)}</span>
+          </>
+        )}
+      </div>
+    </div>
+  )
+}
 
 export default function Month() {
   const { group, userId } = useGroup()
@@ -26,7 +52,7 @@ export default function Month() {
 
   const [editing, setEditing] = useState<Expense | null>(null)
   const [editingPlan, setEditingPlan] = useState<InstallmentPlan | null>(null)
-  const [incomeFor, setIncomeFor] = useState<string | null>(null)
+  const [incomeSheet, setIncomeSheet] = useState<{ userId: string; income?: Income } | null>(null)
 
   const byDay = useMemo(() => {
     const out: [string, Expense[]][] = []
@@ -38,9 +64,9 @@ export default function Month() {
     return out
   }, [expenses.data])
 
-  const incomeByUser = useMemo(() => {
-    const m = new Map<string, number>()
-    for (const i of incomes.data ?? []) m.set(i.user_id, (m.get(i.user_id) ?? 0) + i.amount)
+  const incomesByUser = useMemo(() => {
+    const m = new Map<string, Income[]>()
+    for (const i of incomes.data ?? []) m.set(i.user_id, [...(m.get(i.user_id) ?? []), i])
     return m
   }, [incomes.data])
 
@@ -52,37 +78,30 @@ export default function Month() {
   const missingIncomes = blockers.data?.missing_incomes ?? []
   const missingFixed = blockers.data?.missing_fixed ?? []
   const fixedTotal = fixed.data?.length ?? 0
-  const spentPct = s && s.total_income > 0 ? Math.min(100, (s.total_expenses / s.total_income) * 100) : 0
   const cur = group.currency
+  const pname = periodName(period.data.month, period.data.number)
+  const equal = group.split_mode === 'equal'
 
   return (
     <div className="page">
       <div className="top">
         <div>
-          <h1>{group.name}</h1>
-          <div className="sub">Mes {period.data.number} · desde el {shortDate(period.data.started_at)}</div>
+          <GroupPicker big />
+          <div className="sub">{pname} · desde el {shortDate(period.data.started_at)}</div>
         </div>
       </div>
 
       {/* Resumen */}
-      <div className="card">
-        <div className="small muted">Gastos del mes</div>
+      <div className="card" data-tour="summary">
+        <div className="small muted">Gastos de {pname}</div>
         <div className="big">{money(s?.total_expenses ?? 0, cur)}</div>
-        {s && s.total_income > 0 && (
-          <div style={{ marginTop: 10 }}>
-            <div className="bar"><span style={{ width: `${spentPct}%` }} /></div>
-            <div className="between small muted" style={{ marginTop: 6 }}>
-              <span>{pct(s.total_expenses, s.total_income)} de los ingresos</span>
-              <span>Queda {pct(s.savings, s.total_income)}</span>
-            </div>
-          </div>
-        )}
+        {s && <SpendBar s={s} currency={cur} />}
         <div className="stats">
           <div className="stat"><div className="label">Ingresos</div><div className="value">{money(s?.total_income ?? 0, cur)}</div></div>
           <div className="stat"><div className="label">Pusiste</div><div className="value">{money(me?.paid ?? 0, cur)}</div></div>
           <div className="stat"><div className="label">Te toca</div><div className="value">{money(me?.share ?? 0, cur)}</div></div>
         </div>
-        {me && s && s.total_income > 0 && Math.abs(me.balance) >= 0.01 && (
+        {me && s && Math.abs(me.balance) >= 0.01 && (s.total_income > 0 || equal) && (
           <div className={`badge ${me.balance > 0 ? 'ok' : 'warn'}`} style={{ marginTop: 12 }}>
             {me.balance > 0 ? `Te tienen que devolver ${money(me.balance, cur)}` : `Te falta poner ${money(-me.balance, cur)}`}
           </div>
@@ -90,11 +109,11 @@ export default function Month() {
       </div>
 
       {/* Pendientes para cerrar */}
-      <Link to="/close" className={`card ${missingIncomes.length || missingFixed.length ? 'warn' : 'accent'}`}
+      <Link to="/close" data-tour="close" className={`card ${missingIncomes.length || missingFixed.length ? 'warn' : 'accent'}`}
         style={{ display: 'flex', alignItems: 'center', gap: 12, marginTop: 12, color: 'inherit' }}>
         <Icon name={missingIncomes.length || missingFixed.length ? 'alert' : 'check'} />
         <div className="grow">
-          <div style={{ fontWeight: 600 }}>Resumen y cierre del mes</div>
+          <div style={{ fontWeight: 600 }}>Resumen y cierre de {pname}</div>
           <div className="small muted">
             {missingIncomes.length || missingFixed.length
               ? [
@@ -108,19 +127,33 @@ export default function Month() {
       </Link>
 
       {/* Ingresos */}
-      <div className="section-title">Ingresos</div>
-      <div className="list">
+      <div className="section-title" data-tour="incomes">Ingresos{equal && <span className="faint" style={{ textTransform: 'none', fontWeight: 400 }}> · opcionales (división equitativa)</span>}</div>
+      <div className="stack" style={{ gap: 8 }}>
         {members.map((m) => {
-          const v = incomeByUser.get(m.user_id)
+          const list = incomesByUser.get(m.user_id) ?? []
+          const total = list.reduce((a, i) => a + i.amount, 0)
           return (
-            <button className="item" key={m.user_id} onClick={() => setIncomeFor(m.user_id)}>
-              <Avatar name={m.profile?.display_name ?? '?'} />
-              <div className="grow">
-                <div className="title">{name(m.user_id, { me: true })}</div>
-                <div className="meta">{v === undefined ? 'Sin cargar' : s && s.total_income > 0 ? `${pct(v, s.total_income)} del total` : ''}</div>
+            <div className="list" key={m.user_id}>
+              <div className="item" style={{ cursor: 'default' }}>
+                <Avatar name={m.profile?.display_name ?? '?'} />
+                <div className="grow">
+                  <div className="title">{name(m.user_id, { me: true })}</div>
+                  <div className="meta">
+                    {list.length === 0 ? 'Sin cargar' : s && s.total_income > 0 ? `${pct(total, s.total_income)} del total` : ''}
+                  </div>
+                </div>
+                {list.length > 0 && <Money value={total} currency={cur} />}
               </div>
-              {v === undefined ? <span className="badge warn">Cargar</span> : <Money value={v} currency={cur} />}
-            </button>
+              {list.map((i) => (
+                <button key={i.id} className="item sub-item" onClick={() => setIncomeSheet({ userId: m.user_id, income: i })}>
+                  <span className="grow muted ellipsis">{i.note || 'Ingreso'}</span>
+                  <span className="amount small">{money(i.amount, cur)}</span>
+                </button>
+              ))}
+              <button className="item sub-item add-row" onClick={() => setIncomeSheet({ userId: m.user_id })}>
+                <Icon name="plus" size={18} /> {list.length ? 'Agregar otro ingreso' : 'Cargar ingreso'}
+              </button>
+            </div>
           )
         })}
       </div>
@@ -141,6 +174,7 @@ export default function Month() {
                     <div className="meta">
                       Cuota {n}/{p.installments_total} · {name(p.paid_by, { me: true })} · {p.installments_total - n === 0 ? 'última' : `faltan ${p.installments_total - n}`}
                     </div>
+                    <div className="meta">Comprado el {shortDate(p.spent_at)} · total {money(p.total_amount, cur)}</div>
                   </div>
                   <Money value={installmentAmount(p.total_amount, p.installments_total, n)} currency={cur} />
                 </button>
@@ -154,7 +188,7 @@ export default function Month() {
       <div className="section-title">Gastos</div>
       {expenses.isLoading ? <Spinner /> : byDay.length === 0 ? (
         <div className="empty card">
-          Todavía no hay gastos este mes.<br />
+          Todavía no hay gastos en {pname}.<br />
           <Link to="/add">Cargar el primero</Link>
         </div>
       ) : (
@@ -189,8 +223,9 @@ export default function Month() {
       <Sheet open={!!editingPlan} onClose={() => setEditingPlan(null)} title="Gasto en cuotas">
         {editingPlan && <ExpenseForm key={editingPlan.id} mode="edit-plan" plan={editingPlan} onDone={() => setEditingPlan(null)} />}
       </Sheet>
-      {incomeFor && pid && (
-        <IncomeSheet open onClose={() => setIncomeFor(null)} periodId={pid} incomes={incomes.data ?? []} initialUser={incomeFor} />
+      {incomeSheet && pid && (
+        <IncomeSheet key={incomeSheet.income?.id ?? `new-${incomeSheet.userId}`} onClose={() => setIncomeSheet(null)}
+          periodId={pid} userId={incomeSheet.userId} income={incomeSheet.income} />
       )}
     </div>
   )

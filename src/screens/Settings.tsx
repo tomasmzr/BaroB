@@ -5,7 +5,7 @@ import { Avatar, CategoryChips, Icon, LogoMark, Sheet, Switch, useToast, Wordmar
 import { applyTheme, currentTheme, prefs, type Theme } from '../lib/prefs'
 import { currentSubscription, disablePush, enablePush, isStandalone, pushSupported } from '../lib/push'
 import { errorText, supabase } from '../lib/supabase'
-import type { Category, FixedExpense } from '../lib/types'
+import type { Category, FixedExpense, SplitMode } from '../lib/types'
 import { useCategories, useFixed, useInvalidate, useMembers } from '../state/data'
 import { useGroup } from '../state/session'
 
@@ -78,13 +78,31 @@ export default function Settings() {
 
   async function removeMember(id: string, label: string) {
     const self = id === userId
-    if (!confirm(self ? `¿Salir de «${group.name}»?` : `¿Quitar a ${label} del grupo?`)) return
-    const { error } = await supabase.from('group_members').delete().eq('group_id', group.id).eq('user_id', id)
+    const { data: pv } = await supabase.rpc('member_removal_preview', { p_group: group.id, p_user: id })
+    const c = (pv ?? { expenses: 0, incomes: 0, installments: 0 }) as { expenses: number; incomes: number; installments: number }
+    const lost = [
+      c.expenses ? `${c.expenses} gasto${c.expenses === 1 ? '' : 's'}` : null,
+      c.incomes ? `${c.incomes} ingreso${c.incomes === 1 ? '' : 's'}` : null,
+      c.installments ? `${c.installments} gasto${c.installments === 1 ? '' : 's'} en cuotas pendiente${c.installments === 1 ? '' : 's'}` : null,
+    ].filter(Boolean)
+    const who = self ? 'tus' : `de ${label}:`
+    const warn = lost.length
+      ? `\n\nSe van a borrar ${who} ${lost.join(', ')} del mes en curso. El historial de meses cerrados no se toca.`
+      : '\n\nEl historial de meses cerrados no se toca.'
+    if (!confirm((self ? `¿Salir de «${group.name}»?` : `¿Quitar a ${label} del grupo?`) + warn)) return
+    const { error } = await supabase.rpc('remove_member', { p_group: group.id, p_user: id })
     if (error) return toast(errorText(error))
     if (self) {
       await refreshGroups()
       nav('/', { replace: true })
     } else invalidate()
+  }
+
+  async function testPush() {
+    const { data, error } = await supabase.functions.invoke('notify', { body: { type: 'test' } })
+    if (error) return toast('No se pudo enviar la prueba')
+    const n = (data as { sent?: number })?.sent ?? 0
+    toast(n ? `Notificación enviada a ${n} dispositivo${n === 1 ? '' : 's'}` : 'No hay dispositivos con notificaciones activadas')
   }
 
   async function togglePush(v: boolean) {
@@ -128,7 +146,11 @@ export default function Settings() {
           </div>
         )}
         <button className="btn ghost sm" style={{ alignSelf: 'flex-start' }} onClick={() => setNewGroup(true)}>+ Crear otro grupo</button>
+        <span className="tiny faint">Podés estar en varios grupos, incluso uno solo para tus finanzas personales.</span>
       </div>
+
+      <div className="section-title">División de gastos</div>
+      <SplitSettings key={group.id} />
 
       <div className="section-title">Miembros</div>
       <div className="list">
@@ -211,6 +233,11 @@ export default function Settings() {
           </div>
           <Switch checked={push} onChange={togglePush} label="Notificaciones" />
         </div>
+        {push && (
+          <button className="item" onClick={testPush} style={{ color: 'var(--green)', fontWeight: 600 }}>
+            <Icon name="check" size={20} /> Enviarme una notificación de prueba
+          </button>
+        )}
         <div className="item">
           <div className="grow">
             <div className="title">Abrir directo en «Nuevo gasto»</div>
@@ -221,6 +248,7 @@ export default function Settings() {
       </div>
 
       <div style={{ marginTop: 28 }} className="stack">
+        <button className="btn block" onClick={() => { prefs.set('tourDone', false); nav('/', { replace: true }); window.dispatchEvent(new Event('barob:tour')) }}>Ver el tutorial</button>
         <button className="btn block" onClick={() => supabase.auth.signOut()}>Cerrar sesión</button>
         <div className="row" style={{ justifyContent: 'center', opacity: 0.7 }}>
           <LogoMark size={22} /><Wordmark size={15} />
@@ -333,7 +361,7 @@ function NewGroupSheet({ onClose }: { onClose: () => void }) {
   const [err, setErr] = useState<string | null>(null)
   async function create(e: FormEvent) {
     e.preventDefault()
-    const { data, error } = await supabase.rpc('create_group', { p_name: name.trim() })
+    const { data, error } = await supabase.rpc('create_group', { p_name: name.trim(), p_timezone: Intl.DateTimeFormat().resolvedOptions().timeZone })
     if (error) return setErr(errorText(error))
     selectGroup(data as string)
     await refreshGroups()
@@ -347,5 +375,84 @@ function NewGroupSheet({ onClose }: { onClose: () => void }) {
         <button className="btn primary block" disabled={!name.trim()}>Crear</button>
       </form>
     </Sheet>
+  )
+}
+
+function SplitSettings() {
+  const { group, refreshGroups } = useGroup()
+  const members = useMembers().data ?? []
+  const invalidate = useInvalidate()
+  const toast = useToast()
+  const [mode, setMode] = useState<SplitMode>(group.split_mode)
+  const [minTxt, setMinTxt] = useState(group.split_min != null ? String(Math.round(group.split_min * 100)) : '')
+  const [maxTxt, setMaxTxt] = useState(group.split_max != null ? String(Math.round(group.split_max * 100)) : '')
+  const [busy, setBusy] = useState(false)
+
+  const n = Math.max(1, members.length)
+  const min = minTxt.trim() ? Number(minTxt) / 100 : null
+  const max = maxTxt.trim() ? Number(maxTxt) / 100 : null
+  const invalid = mode === 'proportional_capped' && (
+    (min !== null && (isNaN(min) || min < 0 || min >= 1)) || (max !== null && (isNaN(max) || max <= 0 || max > 1)) ||
+    (min !== null && max !== null && min > max) || (min === null && max === null))
+  const infeasible = mode === 'proportional_capped' && !invalid &&
+    ((min !== null && min * n > 1) || (max !== null && max * n < 1))
+  const dirty = mode !== group.split_mode ||
+    (mode === 'proportional_capped' && (min !== group.split_min || max !== group.split_max))
+
+  async function save() {
+    setBusy(true)
+    const capped = mode === 'proportional_capped'
+    const { error } = await supabase.from('groups').update({
+      split_mode: mode, split_min: capped ? min : null, split_max: capped ? max : null,
+    }).eq('id', group.id)
+    setBusy(false)
+    if (error) return toast(errorText(error))
+    await refreshGroups()
+    invalidate()
+    toast('División actualizada para el mes en curso')
+  }
+
+  const options: { v: SplitMode; t: string; d: string }[] = [
+    { v: 'proportional', t: 'Proporcional a ingresos', d: 'Si ganás el 65% del total, ponés el 65% de los gastos.' },
+    { v: 'proportional_capped', t: 'Proporcional con topes', d: 'Igual que el anterior, pero nadie paga más (o menos) de un % que elijan.' },
+    { v: 'equal', t: 'Partes iguales', d: 'Todos ponen lo mismo, sin importar ingresos. Cargar ingresos pasa a ser opcional.' },
+  ]
+
+  return (
+    <div className="list">
+      {options.map((o) => (
+        <button key={o.v} className="item" onClick={() => setMode(o.v)} aria-pressed={mode === o.v} style={{ alignItems: 'flex-start' }}>
+          <span className={`radio ${mode === o.v ? 'on' : ''}`} />
+          <div className="grow">
+            <div className="title">{o.t}</div>
+            <div className="meta">{o.d}</div>
+          </div>
+        </button>
+      ))}
+      {mode === 'proportional_capped' && (
+        <div className="item" style={{ cursor: 'default', flexWrap: 'wrap', gap: 12 }}>
+          <label className="field" style={{ flex: 1, minWidth: 120 }}>
+            <span className="label">Mínimo (%)</span>
+            <input className="input" inputMode="numeric" placeholder="ej. 20" value={minTxt} onChange={(e) => setMinTxt(e.target.value.replace(/[^\d]/g, ''))} />
+          </label>
+          <label className="field" style={{ flex: 1, minWidth: 120 }}>
+            <span className="label">Máximo (%)</span>
+            <input className="input" inputMode="numeric" placeholder="ej. 60" value={maxTxt} onChange={(e) => setMaxTxt(e.target.value.replace(/[^\d]/g, ''))} />
+          </label>
+          {invalid && <div className="error small" style={{ width: '100%' }}>Poné al menos un tope válido (el mínimo no puede superar al máximo).</div>}
+          {infeasible && (
+            <div className="small" style={{ width: '100%', color: 'var(--warn)' }}>
+              Con {n} miembro{n === 1 ? '' : 's'} esos topes no se pueden cumplir; mientras tanto se usa el proporcional puro.
+            </div>
+          )}
+        </div>
+      )}
+      {dirty && (
+        <div className="item" style={{ cursor: 'default' }}>
+          <span className="grow small muted">Aplica al mes en curso. Los meses cerrados no cambian.</span>
+          <button className="btn primary sm" disabled={busy || invalid} onClick={save}>Guardar</button>
+        </div>
+      )}
+    </div>
   )
 }

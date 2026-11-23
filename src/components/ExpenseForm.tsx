@@ -35,7 +35,7 @@ export default function ExpenseForm(props: Props) {
   const [description, setDescription] = useState(exp?.description ?? plan?.description ?? '')
   const [categoryId, setCategoryId] = useState<string | null>(exp?.category_id ?? plan?.category_id ?? null)
   const [payer, setPayer] = useState(exp?.paid_by ?? plan?.paid_by ?? userId)
-  const [date, setDate] = useState(exp?.spent_at ?? todayISO())
+  const [date, setDate] = useState(exp?.spent_at ?? plan?.spent_at ?? todayISO())
   const [inInstallments, setInInstallments] = useState(!!plan)
   const [count, setCount] = useState(plan?.installments_total ?? 3)
   const [busy, setBusy] = useState(false)
@@ -85,7 +85,7 @@ export default function ExpenseForm(props: Props) {
         if (inInstallments && count > 1) {
           const { data, error } = await supabase.from('installment_plans').insert({
             group_id: group.id, description: description.trim(), category_id: categoryId, paid_by: payer,
-            total_amount: amount, installments_total: count,
+            total_amount: amount, installments_total: count, spent_at: date,
           }).select('id').single()
           if (error) throw error
           notify({ type: 'installment', id: data.id })
@@ -108,7 +108,7 @@ export default function ExpenseForm(props: Props) {
       } else if (plan) {
         const { error } = await supabase.from('installment_plans').update({
           description: description.trim(), category_id: categoryId, paid_by: payer,
-          total_amount: amount, installments_total: count,
+          total_amount: amount, installments_total: count, spent_at: date,
         }).eq('id', plan.id)
         if (error) throw error
         toast('Cuotas actualizadas')
@@ -215,9 +215,9 @@ export default function ExpenseForm(props: Props) {
         </div>
       )}
 
-      {!(inInstallments && props.mode === 'add') && !plan && (
+      {(
         <div className="between">
-          <span className="label">Fecha</span>
+          <span className="label">{inInstallments ? 'Fecha de compra' : 'Fecha'}</span>
           <input type="date" className="input" style={{ width: 'auto', height: 40 }} value={date}
             max={todayISO()} onChange={(e) => setDate(e.target.value || todayISO())} />
         </div>
