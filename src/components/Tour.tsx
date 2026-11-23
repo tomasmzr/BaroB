@@ -2,6 +2,7 @@ import { useEffect, useLayoutEffect, useState, type ReactNode } from 'react'
 import { useLocation, useNavigate } from 'react-router-dom'
 import { prefs } from '../lib/prefs'
 import { isStandalone } from '../lib/push'
+import { setDemo } from '../state/demo'
 import { Icon, LogoMark } from './ui'
 
 interface Step {
@@ -25,31 +26,45 @@ window.addEventListener('beforeinstallprompt', (e) => {
 
 function InstallStep() {
   const [canPrompt, setCanPrompt] = useState(!!deferredInstall)
-  if (isStandalone()) return <>¡Ya tenés BaroB instalada! Abrila siempre desde el ícono de tu pantalla de inicio.</>
+  const [installed, setInstalled] = useState(false)
+  useEffect(() => {
+    const on = () => setCanPrompt(true)
+    window.addEventListener('beforeinstallprompt', on)
+    return () => window.removeEventListener('beforeinstallprompt', on)
+  }, [])
+  if (isStandalone() || installed) return <>¡Listo! BaroB ya está en tu pantalla de inicio. Abrila siempre desde ese ícono.</>
+  if (canPrompt) {
+    return (
+      <>
+        <p style={{ margin: '0 0 10px' }}>Así se abre como una app y te llegan las notificaciones.</p>
+        <button className="btn primary block" onClick={async () => {
+          await deferredInstall?.prompt()
+          deferredInstall = null
+          setCanPrompt(false)
+          setInstalled(true)
+        }}>Agregar a la pantalla de inicio</button>
+      </>
+    )
+  }
   if (isIOS) {
     return (
-      <ol className="tour-list">
-        <li>Abrí esta página en <b>Safari</b>.</li>
-        <li>Tocá el botón <b>Compartir</b> <ShareGlyph /> (abajo en el centro, o arriba a la derecha en iPad).</li>
-        <li>Elegí <b>«Agregar a inicio»</b> y después <b>Agregar</b>.</li>
-        <li>Abrí BaroB desde el ícono nuevo. Así funciona como una app y te llegan las notificaciones.</li>
-      </ol>
+      <>
+        <p style={{ margin: '0 0 8px' }}>En iPhone, Apple no deja que una página web se instale sola, así que son 3 toques:</p>
+        <ol className="tour-list">
+          <li>Tocá <b>Compartir</b> <ShareGlyph /> en la barra de Safari (si no lo ves, tocá <b>•••</b> y después Compartir).</li>
+          <li>Elegí <b>«Agregar a inicio»</b> (o «Agregar a pantalla de inicio»).</li>
+          <li>Tocá <b>Agregar</b> y abrí BaroB desde el ícono nuevo.</li>
+        </ol>
+        <div className="tour-arrow" aria-hidden="true">↓</div>
+      </>
     )
   }
   return (
-    <>
-      {canPrompt ? (
-        <button className="btn primary block" style={{ margin: '4px 0 10px' }}
-          onClick={async () => { await deferredInstall?.prompt(); deferredInstall = null; setCanPrompt(false) }}>
-          Instalar BaroB
-        </button>
-      ) : null}
-      <ol className="tour-list">
-        <li>En Chrome, tocá el menú <b>⋮</b> (arriba a la derecha).</li>
-        <li>Elegí <b>«Instalar app»</b> o <b>«Agregar a pantalla principal»</b>.</li>
-        <li>Abrí BaroB desde el ícono nuevo.</li>
-      </ol>
-    </>
+    <ol className="tour-list">
+      <li>Abrí el menú del navegador (<b>⋮</b>).</li>
+      <li>Elegí <b>«Instalar app»</b> o <b>«Agregar a pantalla principal»</b>.</li>
+      <li>Abrí BaroB desde el ícono nuevo.</li>
+    </ol>
   )
 }
 
@@ -63,58 +78,74 @@ const steps: Step[] = [
   { title: 'Primero: instalala en tu teléfono', body: <InstallStep /> },
   {
     title: 'Bienvenido a BaroB',
-    body: <>Acá registran los gastos de la casa y BaroB calcula cuánto le toca poner a cada uno según lo que gana. Te muestro cómo se usa en 1 minuto.</>,
+    body: <>Acá registran los gastos de la casa y BaroB calcula cuánto le toca poner a cada uno. Te lo muestro con un <b>grupo de ejemplo</b> lleno de datos; al terminar arrancás con el tuyo, de cero.</>,
+  },
+  {
+    target: '.group-bar', route: '/',
+    title: 'Tus grupos',
+    body: <>Arriba de todo está el grupo en el que estás. Tocalo para cambiar a otro o crear uno nuevo (puede ser solo para vos, para tus finanzas personales).</>,
   },
   {
     target: '.nav .fab', route: '/',
     title: 'Cargar un gasto',
-    body: <>Este botón es para cargar un gasto: monto, en qué, categoría y quién pagó (por defecto vos). Si es en cuotas, activás «En cuotas» y elegís cuántas. Al tocar el ícono de la app se abre directo acá.</>,
+    body: <>Con este botón cargás un gasto: monto, en qué, categoría y quién pagó (por defecto vos). Si es en cuotas, activás «En cuotas». Al tocar el ícono de la app se abre directo acá.</>,
   },
   {
     target: '[data-tour="summary"]', route: '/',
     title: 'El mes en curso',
-    body: <>Cuánto se gastó, qué parte de los ingresos representa, cuánto pusiste vos y cuánto te toca. Si los gastos superan los ingresos, la barra se pone en rojo.</>,
+    body: <>Cuánto se gastó, qué parte de los ingresos representa, cuánto pusiste vos y cuánto te toca. Si los gastos superan los ingresos, el excedente se pinta en rojo.</>,
   },
   {
     target: '[data-tour="incomes"]', route: '/',
     title: 'Ingresos',
-    body: <>Cada uno carga lo que ganó en el mes (pueden ser varios ingresos). Con eso se calcula la proporción de cada uno.</>,
+    body: <>Cada uno carga lo que ganó en el mes (pueden ser varios). Con eso se calcula qué parte de los gastos le toca a cada uno.</>,
   },
   {
-    target: '.nav a[href="#/fixed"]', route: '/',
+    target: '[data-tour="fixed"]', route: '/fixed',
     title: 'Gastos fijos',
-    body: <>Alquiler, expensas, luz… Ya tienen descripción y categoría: cada mes solo completás quién pagó y cuánto.</>,
+    body: <>Expensas, luz, prepaga… ya vienen cargados. Cada mes solo completás quién pagó y cuánto. Acá faltan Agua y Prepaga: hasta completarlos no se puede cerrar el mes.</>,
   },
   {
-    target: '[data-tour="close"]', route: '/',
+    target: '[data-tour="settle"]', route: '/close',
     title: 'Cerrar el mes',
-    body: <>Muestra quién le tiene que dar a quién. Se puede cerrar cuando todos cargaron su ingreso y todos los fijos están completos. Los meses llevan nombre (p. ej. «Noviembre 2026») pero se cierran cuando ustedes deciden.</>,
+    body: <>Cuando están todos los fijos e ingresos, BaroB dice quién le pasa plata a quién. Se cierra cuando ustedes deciden; el mes lleva nombre (p. ej. «Noviembre 2026») y arranca el siguiente.</>,
   },
   {
-    target: '.nav a[href="#/history"]', route: '/',
+    target: '[data-tour="chart"]', route: '/history',
     title: 'Historial',
-    body: <>Cada mes cerrado queda guardado, con un gráfico de cómo evoluciona cada categoría.</>,
+    body: <>Cada mes cerrado, y el mes en curso (●), con cada categoría como % de los ingresos. Si una barra pasa la línea del 100%, ese mes se gastó más de lo que entró.</>,
   },
   {
-    target: '.nav a[href="#/settings"]', route: '/',
+    target: '[data-tour="split"]', route: '/settings',
     title: 'Ajustes',
-    body: <>Invitá al resto con un link, editá categorías y gastos fijos, elegí cómo dividir los gastos, el tema claro u oscuro y activá las notificaciones.</>,
+    body: <>Elegí cómo dividir (proporcional, con topes, % fijos o partes iguales), invitá al resto con un link, editá categorías y fijos, y activá las notificaciones.</>,
+  },
+  {
+    route: '/',
+    title: '¡Listo para arrancar!',
+    body: <>Ahora se borra el ejemplo y quedás en tu grupo real. Podés volver a ver este recorrido desde Ajustes.</>,
   },
 ]
 
 export default function Tour() {
   const [open, setOpen] = useState(() => !prefs.get('tourDone', false))
-  const [i, setI] = useState(0)
+  const [i, setI] = useState(() => (isStandalone() ? 1 : 0))
   const [rect, setRect] = useState<DOMRect | null>(null)
   const nav = useNavigate()
   const loc = useLocation()
   const step = steps[i]
 
   useEffect(() => {
-    const start = () => { setI(0); setOpen(true) }
+    const start = () => { setI(isStandalone() ? 1 : 0); setOpen(true) }
     window.addEventListener('barob:tour', start)
     return () => window.removeEventListener('barob:tour', start)
   }, [])
+
+  // Mientras dura el tutorial se muestran datos de ejemplo
+  useEffect(() => {
+    setDemo(open)
+    return () => setDemo(false)
+  }, [open])
 
   useEffect(() => {
     if (open && step.route && loc.pathname !== step.route) nav(step.route)
@@ -137,7 +168,7 @@ export default function Tour() {
 
   if (!open) return null
 
-  const finish = () => { prefs.set('tourDone', true); setOpen(false); setI(0) }
+  const finish = () => { prefs.set('tourDone', true); setOpen(false); setDemo(false); nav('/', { replace: true }) }
   const last = i === steps.length - 1
   const pad = 6
 

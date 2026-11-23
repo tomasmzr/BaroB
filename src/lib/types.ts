@@ -6,7 +6,7 @@ export interface Profile {
   email: string | null
 }
 
-export type SplitMode = 'proportional' | 'proportional_capped' | 'equal'
+export type SplitMode = 'proportional' | 'proportional_capped' | 'equal' | 'fixed'
 
 export interface Group {
   id: UUID
@@ -20,6 +20,8 @@ export interface Group {
 export interface Member {
   user_id: UUID
   joined_at: string
+  /** fracción fija (0..1) para el modo 'fixed' */
+  split_pct: number | null
   profile: Profile | null
 }
 

@@ -3,6 +3,7 @@ import { useQuery, useQueryClient } from '@tanstack/react-query'
 import { createContext, useCallback, useContext, useEffect, useMemo, useState, type ReactNode } from 'react'
 import { supabase } from '../lib/supabase'
 import type { Group, Profile } from '../lib/types'
+import { DEMO_GROUP, useDemo } from './demo'
 
 interface SessionCtx {
   session: Session | null
@@ -130,6 +131,10 @@ export function useSession() {
 /** Para pantallas que ya garantizan grupo seleccionado. */
 export function useGroup() {
   const s = useSession()
-  if (!s.group || !s.userId) throw new Error('sin grupo')
+  const demo = useDemo()
+  if (!s.userId) throw new Error('sin sesión')
+  // Durante el tutorial se muestra un grupo de ejemplo
+  if (demo) return { ...s, group: DEMO_GROUP, groups: [DEMO_GROUP], selectGroup: () => {}, userId: s.userId }
+  if (!s.group) throw new Error('sin grupo')
   return { ...s, group: s.group, userId: s.userId }
 }

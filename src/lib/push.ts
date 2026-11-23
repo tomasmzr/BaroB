@@ -31,17 +31,26 @@ function b64ToBytes(b64: string): Uint8Array<ArrayBuffer> {
   return out
 }
 
+/** serviceWorker.ready nunca resuelve si no hay SW (p.ej. en desarrollo): le ponemos tiempo límite. */
+async function swReady(ms = 4000): Promise<ServiceWorkerRegistration | null> {
+  return Promise.race([
+    navigator.serviceWorker.ready,
+    new Promise<null>((r) => setTimeout(() => r(null), ms)),
+  ])
+}
+
 export async function currentSubscription(): Promise<PushSubscription | null> {
   if (!pushSupported()) return null
-  const reg = await navigator.serviceWorker.ready
-  return reg.pushManager.getSubscription()
+  const reg = await swReady()
+  return reg ? reg.pushManager.getSubscription() : null
 }
 
 export async function enablePush(): Promise<void> {
   if (!pushSupported()) throw new Error('Este navegador no soporta notificaciones push.')
   const perm = await Notification.requestPermission()
   if (perm !== 'granted') throw new Error('Permiso de notificaciones denegado.')
-  const reg = await navigator.serviceWorker.ready
+  const reg = await swReady(10000)
+  if (!reg) throw new Error('La app todavía no terminó de instalarse. Cerrala, abrila de nuevo y probá otra vez.')
   const sub =
     (await reg.pushManager.getSubscription()) ??
     (await reg.pushManager.subscribe({ userVisibleOnly: true, applicationServerKey: b64ToBytes(VAPID!) }))

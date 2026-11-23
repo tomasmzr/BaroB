@@ -1,6 +1,5 @@
 import { useNavigate } from 'react-router-dom'
 import ExpenseForm from '../components/ExpenseForm'
-import { GroupPicker } from '../components/GroupPicker'
 import { Icon } from '../components/ui'
 import { useGroup } from '../state/session'
 
@@ -13,7 +12,7 @@ export default function AddExpense() {
     <div className="page">
       <div className="top">
         <button className="icon-btn" onClick={close} aria-label="Cerrar"><Icon name="close" /></button>
-        <GroupPicker label="Nuevo gasto en" />
+        <h1 style={{ fontSize: 18 }}>Nuevo gasto</h1>
         <span style={{ width: 40 }} />
       </div>
       <ExpenseForm key={group.id} mode="add" onDone={close} />

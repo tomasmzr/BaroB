@@ -1,7 +1,6 @@
 import { useMemo, useState } from 'react'
 import { Link } from 'react-router-dom'
 import ExpenseForm from '../components/ExpenseForm'
-import { GroupPicker } from '../components/GroupPicker'
 import IncomeSheet from '../components/IncomeSheet'
 import { Avatar, Icon, Money, Sheet, Spinner } from '../components/ui'
 import { dayLabel, installmentAmount, money, pct, periodName, shortDate } from '../lib/format'
@@ -86,8 +85,8 @@ export default function Month() {
     <div className="page">
       <div className="top">
         <div>
-          <GroupPicker big />
-          <div className="sub">{pname} · desde el {shortDate(period.data.started_at)}</div>
+          <h1>{pname}</h1>
+          <div className="sub">En curso desde el {shortDate(period.data.started_at)}</div>
         </div>
       </div>
 

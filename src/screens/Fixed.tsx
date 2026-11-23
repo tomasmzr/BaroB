@@ -46,7 +46,7 @@ export default function Fixed() {
         </div>
       ) : (
         <>
-          <div className="card">
+          <div className="card" data-tour="fixed">
             <div className="between">
               <b>{done} de {list.length} completos</b>
               {done === list.length ? <span className="badge ok">Listo</span> : <span className="badge warn">Faltan {list.length - done}</span>}

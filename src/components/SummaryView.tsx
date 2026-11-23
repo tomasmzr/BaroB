@@ -8,9 +8,9 @@ const SAVINGS_COLOR = 'var(--surface-2)'
 
 /** Torta de categorías sobre el total de ingresos + lo que queda para ahorro y vida. */
 export function CategoryPie({ summary, currency }: { summary: Summary; currency: string }) {
-  // Si los gastos superan a los ingresos, cada categoría se mide sobre el total de gastos.
+  // Las categorías siempre se miden sobre los ingresos (si hay excedente, suman más de 100%).
   const over = summary.total_expenses > summary.total_income
-  const base = over || summary.total_income <= 0 ? summary.total_expenses : summary.total_income
+  const base = summary.total_income > 0 ? summary.total_income : summary.total_expenses
   const slices = summary.categories.filter((c) => c.total > 0).map((c) => ({ name: c.name, value: c.total, color: c.color }))
   if (summary.savings > 0) slices.push({ name: 'Ahorro y vida', value: summary.savings, color: SAVINGS_COLOR })
 
@@ -47,7 +47,7 @@ export function CategoryPie({ summary, currency }: { summary: Summary; currency:
         ))}
         {over && summary.total_income > 0 && (
           <div className="small over-text" style={{ borderTop: '1px solid var(--line)', paddingTop: 8 }}>
-            Los gastos superan los ingresos en {money(-summary.savings, currency)}. Los % son sobre el total de gastos.
+            Los gastos superan los ingresos en {money(-summary.savings, currency)} (las categorías suman {pct(summary.total_expenses, summary.total_income)} de los ingresos).
           </div>
         )}
         {!over && summary.total_income > 0 && (
@@ -108,6 +108,7 @@ export function Settlements({ summary, currency }: { summary: Summary; currency:
 
 export function splitLabel(s: Pick<Summary, 'split_mode' | 'split_min' | 'split_max'>): string {
   if (s.split_mode === 'equal') return 'División en partes iguales'
+  if (s.split_mode === 'fixed') return 'Porcentajes fijos por persona'
   if (s.split_mode === 'proportional_capped') {
     const parts = [
       s.split_min != null ? `mínimo ${Math.round(s.split_min * 100)}%` : null,
@@ -128,8 +129,10 @@ export default function SummaryView({ summary, currency }: { summary: Summary; c
           <div className="stat"><div className="label">Queda</div><div className="value">{money(summary.savings, currency)}</div></div>
         </div>
       </div>
-      <div className="section-title">Quién le da a quién</div>
-      <Settlements summary={summary} currency={currency} />
+      <div data-tour="settle">
+        <div className="section-title">Quién le da a quién</div>
+        <Settlements summary={summary} currency={currency} />
+      </div>
       <div className="section-title">Por persona</div>
       {summary.split_mode && <p className="small faint" style={{ margin: '0 4px 8px' }}>{splitLabel(summary)}</p>}
       <MembersTable summary={summary} currency={currency} />

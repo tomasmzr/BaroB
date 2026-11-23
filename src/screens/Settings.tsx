@@ -6,17 +6,17 @@ import { applyTheme, currentTheme, prefs, type Theme } from '../lib/prefs'
 import { currentSubscription, disablePush, enablePush, isStandalone, pushSupported } from '../lib/push'
 import { errorText, supabase } from '../lib/supabase'
 import type { Category, FixedExpense, SplitMode } from '../lib/types'
-import { useCategories, useFixed, useInvalidate, useMembers } from '../state/data'
+import { useCategories, useFixed, useInvalidate, useMembers, useNames } from '../state/data'
 import { useGroup } from '../state/session'
+import { NewGroupSheet } from '../components/GroupPicker'
 
 export const PALETTE = [
-  '#2f7d4f', '#4a9d6b', '#6bb88a', '#8fd0a8', '#1f5c3a', '#3c6e55',
-  '#5b8c85', '#7a9e9f', '#a3b18a', '#c2a878', '#b5835a', '#8c6d62',
-  '#7a8f82', '#9a8fb0', '#6d7f99', '#c48b8b',
+  '#3b82f6', '#ef4444', '#f59e0b', '#eab308', '#a16207', '#8b5cf6', '#ec4899', '#f97316',
+  '#06b6d4', '#6366f1', '#f43f5e', '#0ea5e9', '#d946ef', '#78350f', '#64748b', '#14b8a6',
 ]
 
 export default function Settings() {
-  const { group, groups, selectGroup, userId, profile, refreshGroups } = useGroup()
+  const { group, userId, profile, refreshGroups } = useGroup()
   const members = useMembers().data ?? []
   const cats = useCategories()
   const fixed = useFixed().data ?? []
@@ -34,6 +34,7 @@ export default function Settings() {
   const [editCat, setEditCat] = useState<Category | 'new' | null>(null)
   const [editFixed, setEditFixed] = useState<FixedExpense | 'new' | null>(null)
   const [newGroup, setNewGroup] = useState(false)
+  const [resetting, setResetting] = useState(false)
 
   useEffect(() => setGroupName(group.name), [group.name])
   useEffect(() => setDisplayName(profile?.display_name ?? ''), [profile?.display_name])
@@ -135,22 +136,14 @@ export default function Settings() {
           <label htmlFor="gn">Nombre del grupo</label>
           <input id="gn" className="input" value={groupName} onChange={(e) => setGroupName(e.target.value)} onBlur={saveGroupName} />
         </div>
-        {groups.length > 1 && (
-          <div className="field">
-            <span className="label">Cambiar de grupo</span>
-            <div className="chips">
-              {groups.map((g) => (
-                <button key={g.id} className="chip" aria-pressed={g.id === group.id} onClick={() => selectGroup(g.id)}>{g.name}</button>
-              ))}
-            </div>
-          </div>
-        )}
         <button className="btn ghost sm" style={{ alignSelf: 'flex-start' }} onClick={() => setNewGroup(true)}>+ Crear otro grupo</button>
         <span className="tiny faint">Podés estar en varios grupos, incluso uno solo para tus finanzas personales.</span>
       </div>
 
-      <div className="section-title">División de gastos</div>
-      <SplitSettings key={group.id} />
+      <div data-tour="split">
+        <div className="section-title">División de gastos</div>
+        <SplitSettings key={group.id} />
+      </div>
 
       <div className="section-title">Miembros</div>
       <div className="list">
@@ -250,6 +243,7 @@ export default function Settings() {
       <div style={{ marginTop: 28 }} className="stack">
         <button className="btn block" onClick={() => { prefs.set('tourDone', false); nav('/', { replace: true }); window.dispatchEvent(new Event('barob:tour')) }}>Ver el tutorial</button>
         <button className="btn block" onClick={() => supabase.auth.signOut()}>Cerrar sesión</button>
+        <button className="btn ghost danger block" onClick={() => setResetting(true)}>Borrar todos mis datos y empezar de cero</button>
         <div className="row" style={{ justifyContent: 'center', opacity: 0.7 }}>
           <LogoMark size={22} /><Wordmark size={15} />
         </div>
@@ -258,6 +252,7 @@ export default function Settings() {
       {editCat && <CategorySheet key={editCat === 'new' ? 'new' : editCat.id} cat={editCat} onClose={() => setEditCat(null)} />}
       {editFixed && <FixedSheet key={editFixed === 'new' ? 'new' : editFixed.id} fixed={editFixed} onClose={() => setEditFixed(null)} />}
       {newGroup && <NewGroupSheet onClose={() => setNewGroup(false)} />}
+      {resetting && <ResetSheet onClose={() => setResetting(false)} />}
     </div>
   )
 }
@@ -355,58 +350,51 @@ function FixedSheet({ fixed, onClose }: { fixed: FixedExpense | 'new'; onClose: 
   )
 }
 
-function NewGroupSheet({ onClose }: { onClose: () => void }) {
-  const { selectGroup, refreshGroups } = useGroup()
-  const [name, setName] = useState('')
-  const [err, setErr] = useState<string | null>(null)
-  async function create(e: FormEvent) {
-    e.preventDefault()
-    const { data, error } = await supabase.rpc('create_group', { p_name: name.trim(), p_timezone: Intl.DateTimeFormat().resolvedOptions().timeZone })
-    if (error) return setErr(errorText(error))
-    selectGroup(data as string)
-    await refreshGroups()
-    onClose()
-  }
-  return (
-    <Sheet open onClose={onClose} title="Nuevo grupo">
-      <form className="stack" onSubmit={create}>
-        <input className="input" value={name} onChange={(e) => setName(e.target.value)} placeholder="Nombre del grupo" autoFocus />
-        {err && <p className="error">{err}</p>}
-        <button className="btn primary block" disabled={!name.trim()}>Crear</button>
-      </form>
-    </Sheet>
-  )
-}
-
 function SplitSettings() {
   const { group, refreshGroups } = useGroup()
   const members = useMembers().data ?? []
+  const { name } = useNames()
   const invalidate = useInvalidate()
   const toast = useToast()
   const [mode, setMode] = useState<SplitMode>(group.split_mode)
   const [minTxt, setMinTxt] = useState(group.split_min != null ? String(Math.round(group.split_min * 100)) : '')
   const [maxTxt, setMaxTxt] = useState(group.split_max != null ? String(Math.round(group.split_max * 100)) : '')
+  const [pcts, setPcts] = useState<Record<string, string>>({})
   const [busy, setBusy] = useState(false)
 
   const n = Math.max(1, members.length)
+  const pctOf = (uid: string) => {
+    if (pcts[uid] !== undefined) return pcts[uid]
+    const m = members.find((x) => x.user_id === uid)
+    return m?.split_pct != null ? String(Math.round(m.split_pct * 1000) / 10) : String(Math.round(1000 / n) / 10)
+  }
+  const pctSum = members.reduce((a, m) => a + (Number(pctOf(m.user_id).replace(',', '.')) || 0), 0)
   const min = minTxt.trim() ? Number(minTxt) / 100 : null
   const max = maxTxt.trim() ? Number(maxTxt) / 100 : null
-  const invalid = mode === 'proportional_capped' && (
+  const invalidCaps = mode === 'proportional_capped' && (
     (min !== null && (isNaN(min) || min < 0 || min >= 1)) || (max !== null && (isNaN(max) || max <= 0 || max > 1)) ||
     (min !== null && max !== null && min > max) || (min === null && max === null))
-  const infeasible = mode === 'proportional_capped' && !invalid &&
+  const infeasible = mode === 'proportional_capped' && !invalidCaps &&
     ((min !== null && min * n > 1) || (max !== null && max * n < 1))
-  const dirty = mode !== group.split_mode ||
+  const invalidPcts = mode === 'fixed' && Math.abs(pctSum - 100) > 0.05
+  const pctsChanged = mode === 'fixed' && members.some((m) => {
+    const cur = m.split_pct != null ? Math.round(m.split_pct * 1000) / 10 : null
+    return cur === null || Math.abs(cur - (Number(pctOf(m.user_id).replace(',', '.')) || 0)) > 0.01
+  })
+  const dirty = mode !== group.split_mode || pctsChanged ||
     (mode === 'proportional_capped' && (min !== group.split_min || max !== group.split_max))
 
   async function save() {
     setBusy(true)
-    const capped = mode === 'proportional_capped'
-    const { error } = await supabase.from('groups').update({
-      split_mode: mode, split_min: capped ? min : null, split_max: capped ? max : null,
-    }).eq('id', group.id)
+    const p_pcts = mode === 'fixed'
+      ? Object.fromEntries(members.map((m) => [m.user_id, (Number(pctOf(m.user_id).replace(',', '.')) || 0) / 100]))
+      : null
+    const { error } = await supabase.rpc('set_split', {
+      p_group: group.id, p_mode: mode, p_min: min, p_max: max, p_pcts,
+    })
     setBusy(false)
     if (error) return toast(errorText(error))
+    setPcts({})
     await refreshGroups()
     invalidate()
     toast('División actualizada para el mes en curso')
@@ -415,7 +403,8 @@ function SplitSettings() {
   const options: { v: SplitMode; t: string; d: string }[] = [
     { v: 'proportional', t: 'Proporcional a ingresos', d: 'Si ganás el 65% del total, ponés el 65% de los gastos.' },
     { v: 'proportional_capped', t: 'Proporcional con topes', d: 'Igual que el anterior, pero nadie paga más (o menos) de un % que elijan.' },
-    { v: 'equal', t: 'Partes iguales', d: 'Todos ponen lo mismo, sin importar ingresos. Cargar ingresos pasa a ser opcional.' },
+    { v: 'fixed', t: 'Porcentajes fijos', d: 'Cada uno pone un % acordado, sin importar ingresos. Los ingresos pasan a ser opcionales.' },
+    { v: 'equal', t: 'Partes iguales', d: 'Todos ponen lo mismo, sin importar ingresos. Los ingresos pasan a ser opcionales.' },
   ]
 
   return (
@@ -439,7 +428,7 @@ function SplitSettings() {
             <span className="label">Máximo (%)</span>
             <input className="input" inputMode="numeric" placeholder="ej. 60" value={maxTxt} onChange={(e) => setMaxTxt(e.target.value.replace(/[^\d]/g, ''))} />
           </label>
-          {invalid && <div className="error small" style={{ width: '100%' }}>Poné al menos un tope válido (el mínimo no puede superar al máximo).</div>}
+          {invalidCaps && <div className="error small" style={{ width: '100%' }}>Poné al menos un tope válido (el mínimo no puede superar al máximo).</div>}
           {infeasible && (
             <div className="small" style={{ width: '100%', color: 'var(--warn)' }}>
               Con {n} miembro{n === 1 ? '' : 's'} esos topes no se pueden cumplir; mientras tanto se usa el proporcional puro.
@@ -447,12 +436,80 @@ function SplitSettings() {
           )}
         </div>
       )}
+      {mode === 'fixed' && (
+        <div className="item" style={{ cursor: 'default', flexDirection: 'column', alignItems: 'stretch', gap: 8 }}>
+          {members.map((m) => (
+            <label key={m.user_id} className="between">
+              <span>{name(m.user_id, { me: true })}</span>
+              <span className="row" style={{ gap: 6 }}>
+                <input className="input" inputMode="decimal" style={{ width: 84, height: 40, textAlign: 'right' }}
+                  value={pctOf(m.user_id)} onChange={(e) => setPcts({ ...pcts, [m.user_id]: e.target.value.replace(/[^\d.,]/g, '') })} />
+                <span className="muted">%</span>
+              </span>
+            </label>
+          ))}
+          <div className={`small ${invalidPcts ? 'error' : 'muted'}`} style={{ textAlign: 'right' }}>
+            Total: {Math.round(pctSum * 10) / 10}%{invalidPcts ? ' — tiene que sumar 100%' : ''}
+          </div>
+        </div>
+      )}
       {dirty && (
         <div className="item" style={{ cursor: 'default' }}>
           <span className="grow small muted">Aplica al mes en curso. Los meses cerrados no cambian.</span>
-          <button className="btn primary sm" disabled={busy || invalid} onClick={save}>Guardar</button>
+          <button className="btn primary sm" disabled={busy || invalidCaps || invalidPcts} onClick={save}>Guardar</button>
         </div>
       )}
     </div>
+  )
+}
+
+function ResetSheet({ onClose }: { onClose: () => void }) {
+  const qc = useQueryClient()
+  const [confirmTxt, setConfirmTxt] = useState('')
+  const [account, setAccount] = useState(false)
+  const [busy, setBusy] = useState(false)
+  const [err, setErr] = useState<string | null>(null)
+  const ok = confirmTxt.trim().toUpperCase() === 'BORRAR'
+
+  async function wipe() {
+    setBusy(true)
+    setErr(null)
+    try { await disablePush() } catch { /* sin push */ }
+    const { error } = await supabase.rpc('delete_my_data', { p_delete_account: account })
+    if (error) {
+      setBusy(false)
+      return setErr(errorText(error))
+    }
+    try {
+      Object.keys(localStorage).filter((k) => k.startsWith('barob.')).forEach((k) => localStorage.removeItem(k))
+    } catch { /* sin storage */ }
+    qc.clear()
+    if (account) await supabase.auth.signOut({ scope: 'local' })
+    window.location.hash = '#/'
+    window.location.reload()
+  }
+
+  return (
+    <Sheet open onClose={onClose} title="Borrar todo y empezar de cero">
+      <div className="stack">
+        <p className="small" style={{ margin: 0 }}>Esto no se puede deshacer:</p>
+        <ul className="small muted" style={{ margin: 0, paddingLeft: 18, display: 'grid', gap: 4 }}>
+          <li>Los grupos donde estás solo se borran completos, con su historial.</li>
+          <li>De los grupos compartidos salís: se borran tus gastos, ingresos y cuotas del mes en curso. Los meses cerrados quedan para los demás.</li>
+          <li>Se desactivan las notificaciones y se reinicia el tutorial.</li>
+        </ul>
+        <label className="row small" style={{ cursor: 'pointer' }}>
+          <input type="checkbox" checked={account} onChange={(e) => setAccount(e.target.checked)} />
+          Borrar también mi cuenta (email y contraseña)
+        </label>
+        <div className="field">
+          <label htmlFor="wipe">Escribí <b>BORRAR</b> para confirmar</label>
+          <input id="wipe" className="input" autoCapitalize="characters" value={confirmTxt} onChange={(e) => setConfirmTxt(e.target.value)} />
+        </div>
+        {err && <p className="error">{err}</p>}
+        <button className="btn block" style={{ background: 'var(--danger)', borderColor: 'var(--danger)', color: '#fff' }}
+          disabled={!ok || busy} onClick={wipe}>{busy ? 'Borrando…' : 'Borrar todo'}</button>
+      </div>
+    </Sheet>
   )
 }

@@ -4,6 +4,7 @@ import { supabase } from '../lib/supabase'
 import type {
   Blockers, Category, Expense, FixedExpense, Income, InstallmentPlan, Member, Period, Summary,
 } from '../lib/types'
+import { DEMO_ID, demoData } from './demo'
 import { useGroup } from './session'
 
 async function rows<T>(p: PromiseLike<{ data: unknown; error: unknown }>): Promise<T> {
@@ -23,6 +24,7 @@ export function useRealtime() {
   const qc = useQueryClient()
   useEffect(() => {
     const gid = group.id
+    if (gid === DEMO_ID) return
     const ch = supabase.channel(`group:${gid}`)
     for (const table of ['expenses', 'incomes', 'installment_plans', 'periods', 'fixed_expenses', 'categories', 'group_members']) {
       ch.on('postgres_changes', { event: '*', schema: 'public', table, filter: `group_id=eq.${gid}` }, () => {
@@ -48,12 +50,12 @@ export function useInvalidate() {
 }
 
 export function useMembers() {
-  const { group } = useGroup()
+  const { group, userId } = useGroup()
   return useQuery({
     queryKey: [group.id, 'members'],
-    queryFn: () =>
+    queryFn: group.id === DEMO_ID ? async () => demoData(userId).members : () =>
       rows<Member[]>(
-        supabase.from('group_members').select('user_id, joined_at, profile:profiles(id, display_name, email)')
+        supabase.from('group_members').select('user_id, joined_at, split_pct, profile:profiles(id, display_name, email)')
           .eq('group_id', group.id).order('joined_at'),
       ),
   })
@@ -74,10 +76,10 @@ export function useNames() {
 }
 
 export function useCategories() {
-  const { group } = useGroup()
+  const { group, userId } = useGroup()
   const q = useQuery({
     queryKey: [group.id, 'categories'],
-    queryFn: () =>
+    queryFn: group.id === DEMO_ID ? async () => demoData(userId).categories : () =>
       rows<Category[]>(supabase.from('categories').select('*').eq('group_id', group.id).order('sort').order('name')),
   })
   const byId = useMemo(() => new Map((q.data ?? []).map((c) => [c.id, c])), [q.data])
@@ -86,10 +88,10 @@ export function useCategories() {
 }
 
 export function useFixed() {
-  const { group } = useGroup()
+  const { group, userId } = useGroup()
   return useQuery({
     queryKey: [group.id, 'fixed'],
-    queryFn: () =>
+    queryFn: group.id === DEMO_ID ? async () => demoData(userId).fixed : () =>
       rows<FixedExpense[]>(
         supabase.from('fixed_expenses').select('*').eq('group_id', group.id).eq('active', true).order('sort').order('description'),
       ),
@@ -97,10 +99,10 @@ export function useFixed() {
 }
 
 export function useOpenPeriod() {
-  const { group } = useGroup()
+  const { group, userId } = useGroup()
   return useQuery({
     queryKey: [group.id, 'period'],
-    queryFn: () =>
+    queryFn: group.id === DEMO_ID ? async () => demoData(userId).period : () =>
       rows<Period>(
         supabase.from('periods').select('id, group_id, number, month, started_at, closed_at').eq('group_id', group.id)
           .is('closed_at', null).single(),
@@ -109,11 +111,11 @@ export function useOpenPeriod() {
 }
 
 export function useExpenses(periodId: string | undefined) {
-  const { group } = useGroup()
+  const { group, userId } = useGroup()
   return useQuery({
     queryKey: [group.id, 'expenses', periodId],
     enabled: !!periodId,
-    queryFn: async () =>
+    queryFn: group.id === DEMO_ID ? async () => (periodId === demoData(userId).period.id ? demoData(userId).expenses : []) : async () =>
       (await rows<Expense[]>(
         supabase.from('expenses').select('*').eq('period_id', periodId!)
           .order('spent_at', { ascending: false }).order('created_at', { ascending: false }),
@@ -122,21 +124,21 @@ export function useExpenses(periodId: string | undefined) {
 }
 
 export function useIncomes(periodId: string | undefined) {
-  const { group } = useGroup()
+  const { group, userId } = useGroup()
   return useQuery({
     queryKey: [group.id, 'incomes', periodId],
     enabled: !!periodId,
-    queryFn: async () =>
+    queryFn: group.id === DEMO_ID ? async () => (periodId === demoData(userId).period.id ? demoData(userId).incomes : []) : async () =>
       (await rows<Income[]>(supabase.from('incomes').select('*').eq('period_id', periodId!).order('created_at')))
         .map((e) => numify(e, ['amount'])),
   })
 }
 
 export function usePlans() {
-  const { group } = useGroup()
+  const { group, userId } = useGroup()
   return useQuery({
     queryKey: [group.id, 'plans'],
-    queryFn: async () =>
+    queryFn: group.id === DEMO_ID ? async () => demoData(userId).plans : async () =>
       (await rows<InstallmentPlan[]>(
         supabase.from('installment_plans').select('*').eq('group_id', group.id).is('finished_at', null)
           .order('created_at', { ascending: false }),
@@ -145,28 +147,28 @@ export function usePlans() {
 }
 
 export function useSummary(periodId: string | undefined) {
-  const { group } = useGroup()
+  const { group, userId } = useGroup()
   return useQuery({
     queryKey: [group.id, 'summary', periodId],
     enabled: !!periodId,
-    queryFn: () => rows<Summary>(supabase.rpc('period_summary', { p_period: periodId! })),
+    queryFn: group.id === DEMO_ID ? async () => (periodId === demoData(userId).period.id ? demoData(userId).summary : demoData(userId).history.find((h) => h.id === periodId)?.summary ?? demoData(userId).summary) : () => rows<Summary>(supabase.rpc('period_summary', { p_period: periodId! })),
   })
 }
 
 export function useBlockers(periodId: string | undefined) {
-  const { group } = useGroup()
+  const { group, userId } = useGroup()
   return useQuery({
     queryKey: [group.id, 'blockers', periodId],
     enabled: !!periodId,
-    queryFn: () => rows<Blockers>(supabase.rpc('close_blockers', { p_period: periodId! })),
+    queryFn: group.id === DEMO_ID ? async () => demoData(userId).blockers : () => rows<Blockers>(supabase.rpc('close_blockers', { p_period: periodId! })),
   })
 }
 
 export function useHistory() {
-  const { group } = useGroup()
+  const { group, userId } = useGroup()
   return useQuery({
     queryKey: [group.id, 'history'],
-    queryFn: () =>
+    queryFn: group.id === DEMO_ID ? async () => demoData(userId).history : () =>
       rows<Period[]>(
         supabase.from('periods').select('*').eq('group_id', group.id).not('closed_at', 'is', null)
           .order('number', { ascending: false }),
@@ -180,7 +182,7 @@ export function useRecentDescriptions() {
   return useQuery({
     queryKey: [group.id, 'recent'],
     staleTime: 5 * 60_000,
-    queryFn: async () => {
+    queryFn: group.id === DEMO_ID ? async () => [] as { description: string; category_id: string | null; count: number }[] : async () => {
       const data = await rows<{ description: string; category_id: string | null }[]>(
         supabase.from('expenses').select('description, category_id').eq('group_id', group.id).is('fixed_expense_id', null)
           .order('created_at', { ascending: false }).limit(300),

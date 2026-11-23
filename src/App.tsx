@@ -1,5 +1,6 @@
 import { useEffect } from 'react'
 import { Navigate, NavLink, Outlet, Route, Routes, useLocation, useNavigate } from 'react-router-dom'
+import { GroupBar } from './components/GroupPicker'
 import Tour from './components/Tour'
 import { Icon, Spinner } from './components/ui'
 import { configured } from './lib/supabase'
@@ -25,6 +26,7 @@ function Shell() {
   useRealtime()
   return (
     <>
+      <GroupBar />
       <Outlet />
       <Tour />
       <nav className="nav" aria-label="Navegación">

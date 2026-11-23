@@ -47,7 +47,7 @@ Deno.serve(async (req) => {
   // Prueba: solo a los dispositivos del que la pide.
   if (type === 'test') {
     const sent = await send(db, new Map([[user.id, {
-      title: 'BaroB', body: 'Las notificaciones funcionan en este dispositivo ✓', url: '#/settings', tag: 'test',
+      title: 'Notificación de prueba', body: 'Las notificaciones funcionan en este dispositivo ✓', url: '#/settings', tag: 'test',
     }]]))
     return json({ sent })
   }
