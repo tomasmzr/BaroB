@@ -58,7 +58,7 @@ export default function Login() {
       <div className="stack" style={{ alignItems: 'center', marginBottom: 28, gap: 14 }}>
         <LogoMark size={72} />
         <Wordmark size={30} />
-        <p className="muted" style={{ margin: 0, textAlign: 'center' }}>Los gastos de la casa, en proporción a lo que gana cada uno.</p>
+        <p className="muted" style={{ margin: 0, textAlign: 'center' }}>Tu app de gestión de gastos personales y familiares.</p>
       </div>
 
       {mode !== 'forgot' && (
