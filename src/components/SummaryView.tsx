@@ -6,13 +6,13 @@ import { Avatar, Money } from './ui'
 
 const SAVINGS_COLOR = 'var(--surface-2)'
 
-/** Torta de categorías sobre el total de ingresos + lo que queda para ahorro y vida. */
+/** Torta de categorías sobre el total de ingresos + lo que queda (restante). */
 export function CategoryPie({ summary, currency }: { summary: Summary; currency: string }) {
   // Las categorías siempre se miden sobre los ingresos (si hay excedente, suman más de 100%).
   const over = summary.total_expenses > summary.total_income
   const base = summary.total_income > 0 ? summary.total_income : summary.total_expenses
   const slices = summary.categories.filter((c) => c.total > 0).map((c) => ({ name: c.name, value: c.total, color: c.color }))
-  if (summary.savings > 0) slices.push({ name: 'Ahorro y vida', value: summary.savings, color: SAVINGS_COLOR })
+  if (summary.savings > 0) slices.push({ name: 'Restante', value: summary.savings, color: SAVINGS_COLOR })
 
   return (
     <div className="card">
@@ -52,7 +52,7 @@ export function CategoryPie({ summary, currency }: { summary: Summary; currency:
         )}
         {!over && summary.total_income > 0 && (
           <div className="between" style={{ borderTop: '1px solid var(--line)', paddingTop: 8 }}>
-            <span className="row" style={{ gap: 8 }}><span className="dot" style={{ background: SAVINGS_COLOR, border: '1px solid var(--line)' }} />Ahorro y vida</span>
+            <span className="row" style={{ gap: 8 }}><span className="dot" style={{ background: SAVINGS_COLOR, border: '1px solid var(--line)' }} />Restante</span>
             <span className="num"><span className="muted">{pct(summary.savings, summary.total_income)}</span> · {money(summary.savings, currency)}</span>
           </div>
         )}

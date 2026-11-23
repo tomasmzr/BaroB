@@ -7,7 +7,7 @@ import type { Summary } from '../lib/types'
 import { useHistory, useOpenPeriod, useSummary } from '../state/data'
 import { useGroup } from '../state/session'
 
-const SAVINGS = 'Ahorro y vida'
+const SAVINGS = 'Restante'
 
 export default function History() {
   const { group } = useGroup()
