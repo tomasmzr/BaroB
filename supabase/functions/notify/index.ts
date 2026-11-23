@@ -72,7 +72,8 @@ Deno.serve(async (req) => {
   const messages = new Map<string, Payload>()
   if (type === 'period_closed') {
     const s = row.summary as {
-      members: { user_id: string; balance: number }[]
+      split_mode?: string
+      members: { user_id: string; balance: number; paid: number; ratio?: number }[]
       settlements: { from: string; to: string; amount: number }[]
     } | null
     if (!s) return json({ error: 'period not closed' }, 400)
@@ -81,7 +82,9 @@ Deno.serve(async (req) => {
       const gives = s.settlements.filter((t) => t.from === uid).map((t) => `${money(t.amount, cur)} a ${nameOf(t.to)}`)
       const gets = s.settlements.filter((t) => t.to === uid).map((t) => `${nameOf(t.from)} te da ${money(t.amount, cur)}`)
       let body = 'Estás al día, no hay que pasar plata.'
-      if (me && me.balance > 0.005) body = `Te tienen que devolver ${money(me.balance, cur)}. ${gets.join(' · ')}`
+      if (s.split_mode === 'none' && me) {
+        body = `Te correspondió el ${Math.round((me.ratio ?? 0) * 1000) / 10}% de los gastos (${money(me.paid, cur)}).`
+      } else if (me && me.balance > 0.005) body = `Te tienen que devolver ${money(me.balance, cur)}. ${gets.join(' · ')}`
       else if (me && me.balance < -0.005) body = `Tenés que poner ${money(-me.balance, cur)}: ${gives.join(' · ')}`
       messages.set(uid, { title: `${group?.name}: ${monthName(row.month) ?? `mes ${row.number}`} cerrado`, body, url: `#/history/${row.id}`, tag: `close-${row.id}` })
     }
@@ -97,6 +100,8 @@ Deno.serve(async (req) => {
       p = { title: `${actor} cargó un ingreso`, body: `Ingreso de ${nameOf(row.user_id)} para el mes en curso`, url: '#/' }
     } else if (type === 'fixed') {
       p = { title: `${actor} completó un gasto fijo`, body: `${row.description} · ${money(Number(row.amount), cur)} · pagó ${nameOf(row.paid_by)}`, url: '#/fixed' }
+    } else if (Number(row.amount) < 0) {
+      p = { title: `${actor} cargó una devolución`, body: `${row.description} · ${money(-Number(row.amount), cur)} · recibió ${nameOf(row.paid_by)}`, url: '#/' }
     } else {
       p = { title: `${actor} cargó un gasto`, body: `${row.description} · ${money(Number(row.amount), cur)} · pagó ${nameOf(row.paid_by)}`, url: '#/' }
     }

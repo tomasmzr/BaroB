@@ -2,7 +2,7 @@ import { useState } from 'react'
 import { useNavigate, useParams } from 'react-router-dom'
 import SummaryView from '../components/SummaryView'
 import { Icon, Money, Spinner } from '../components/ui'
-import { periodName, shortDate } from '../lib/format'
+import { money, periodName, shortDate } from '../lib/format'
 import { useCategories, useExpenses, useHistory, useNames } from '../state/data'
 import { useGroup } from '../state/session'
 
@@ -31,7 +31,7 @@ export default function HistoryDetail() {
         <span style={{ width: 40 }} />
       </div>
 
-      <SummaryView summary={p.summary} currency={group.currency} />
+      <SummaryView summary={p.summary} currency={group.currency} history />
 
       {p.summary.installments.length > 0 && (
         <>
@@ -55,16 +55,18 @@ export default function HistoryDetail() {
         <button className="btn block" onClick={() => setShowAll(true)}>Ver todos los gastos del mes</button>
       ) : expenses.isLoading ? <Spinner /> : (
         <div className="list">
-          {(expenses.data ?? []).map((e) => {
+          {[...(expenses.data ?? []).filter((e) => e.amount >= 0), ...(expenses.data ?? []).filter((e) => e.amount < 0)].map((e) => {
             const cat = e.category_id ? byId.get(e.category_id) : undefined
             return (
               <div className="item" key={e.id}>
                 <span className="dot" style={{ background: cat?.color ?? 'var(--text-3)' }} />
                 <div className="grow">
                   <div className="title ellipsis">{e.description}</div>
-                  <div className="meta">{shortDate(e.spent_at)} · {cat?.name ?? 'Sin categoría'} · {name(e.paid_by, { me: true })}</div>
+                  <div className="meta">{e.amount < 0 ? 'Devolución · ' : ''}{shortDate(e.spent_at)} · {cat?.name ?? 'Sin categoría'} · {name(e.paid_by, { me: true })}</div>
                 </div>
-                <Money value={e.amount} currency={group.currency} />
+                {e.amount < 0
+                  ? <span className="amount refund-text">−{money(-e.amount, group.currency)}</span>
+                  : <Money value={e.amount} currency={group.currency} />}
               </div>
             )
           })}

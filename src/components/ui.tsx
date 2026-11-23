@@ -1,5 +1,6 @@
+import { createPortal } from 'react-dom'
 import { createContext, useCallback, useContext, useEffect, useState, type CSSProperties, type ReactNode } from 'react'
-import { initials, money } from '../lib/format'
+import { formatAmountInput, initials, money } from '../lib/format'
 import type { Category, Member } from '../lib/types'
 
 /* ---------- Íconos (trazo simple, 24px) ---------- */
@@ -115,7 +116,8 @@ export function Sheet({ open, onClose, children, title }: {
     }
   }, [open, onClose])
   if (!open) return null
-  return (
+  // Portal: la hoja no queda anidada dentro de otro formulario u hoja.
+  return createPortal(
     <div className="backdrop" style={box} onClick={onClose}>
       <div className="sheet" role="dialog" aria-modal="true" aria-label={title} onClick={(e) => e.stopPropagation()}>
         <div className="grab" />
@@ -127,7 +129,8 @@ export function Sheet({ open, onClose, children, title }: {
         )}
         {children}
       </div>
-    </div>
+    </div>,
+    document.body,
   )
 }
 
@@ -167,8 +170,8 @@ export function PayerChips({ members, value, onChange, meId }: {
   )
 }
 
-export function CategoryChips({ categories, value, onChange }: {
-  categories: Category[]; value: string | null; onChange: (id: string) => void
+export function CategoryChips({ categories, value, onChange, onAdd }: {
+  categories: Category[]; value: string | null; onChange: (id: string) => void; onAdd?: () => void
 }) {
   return (
     <div className="chips">
@@ -178,6 +181,9 @@ export function CategoryChips({ categories, value, onChange }: {
           {c.name}
         </button>
       ))}
+      {onAdd && (
+        <button type="button" className="chip chip-add" onClick={onAdd}>+ Nueva categoría</button>
+      )}
     </div>
   )
 }
@@ -210,5 +216,22 @@ export function Stepper({ value, onChange, min = 1, max = 120 }: {
         onBlur={() => { onChange(clamp(parseInt(text ?? String(value), 10))); setText(null) }} />
       <button type="button" onClick={() => onChange(clamp(value + 1))} aria-label="Más">+</button>
     </div>
+  )
+}
+
+/** Campo de monto grande: "$" siempre visible, puntos de miles automáticos, sin negativos. */
+export function AmountInput({ value, onChange, autoFocus, label = 'Monto' }: {
+  value: string; onChange: (v: string) => void; autoFocus?: boolean; label?: string
+}) {
+  return (
+    <input
+      className="amount-input num"
+      inputMode="decimal"
+      placeholder="$ 0"
+      aria-label={label}
+      autoFocus={autoFocus}
+      value={value}
+      onChange={(e) => onChange(formatAmountInput(e.target.value))}
+    />
   )
 }

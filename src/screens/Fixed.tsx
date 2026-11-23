@@ -1,7 +1,7 @@
 import { useMemo, useState, type FormEvent } from 'react'
-import { Link } from 'react-router-dom'
-import { Icon, Money, PayerChips, Sheet, Spinner, useToast } from '../components/ui'
-import { money, parseAmount, todayISO } from '../lib/format'
+import { FixedTemplateSheet } from '../components/CatalogSheets'
+import { AmountInput, Icon, Money, PayerChips, Sheet, Spinner, useToast } from '../components/ui'
+import { amountToInput, money, parseAmount, todayISO } from '../lib/format'
 import { notify } from '../lib/push'
 import { errorText, supabase } from '../lib/supabase'
 import type { Expense, FixedExpense } from '../lib/types'
@@ -16,6 +16,7 @@ export default function Fixed() {
   const { byId } = useCategories()
   const { name } = useNames()
   const [open, setOpen] = useState<FixedExpense | null>(null)
+  const [adding, setAdding] = useState(false)
 
   const paid = useMemo(() => {
     const m = new Map<string, Expense>()
@@ -40,9 +41,11 @@ export default function Fixed() {
       </div>
 
       {list.length === 0 ? (
-        <div className="card empty">
-          No hay gastos fijos definidos.<br />
-          <Link to="/settings">Agregalos en Ajustes</Link>
+        <div className="list">
+          <div className="item muted" style={{ cursor: 'default' }}>No hay gastos fijos definidos.</div>
+          <button className="item add-row" onClick={() => setAdding(true)}>
+              <Icon name="plus" size={18} /> Agregar gasto fijo
+            </button>
         </div>
       ) : (
         <>
@@ -96,12 +99,15 @@ export default function Fixed() {
               </div>
             </>
           )}
-          <p className="small faint" style={{ textAlign: 'center', marginTop: 20 }}>
-            Para agregar o quitar fijos: <Link to="/settings">Ajustes</Link>
-          </p>
+          <div className="list" style={{ marginTop: 12 }}>
+            <button className="item add-row" onClick={() => setAdding(true)}>
+              <Icon name="plus" size={18} /> Agregar gasto fijo
+            </button>
+          </div>
         </>
       )}
 
+      {adding && <FixedTemplateSheet fixed="new" onClose={() => setAdding(false)} />}
       {open && period && (
         <FixedSheet key={open.id} fixed={open} existing={paid.get(open.id)} periodId={period.id} onClose={() => setOpen(null)} />
       )}
@@ -116,7 +122,7 @@ function FixedSheet({ fixed, existing, periodId, onClose }: {
   const members = useMembers().data ?? []
   const invalidate = useInvalidate()
   const toast = useToast()
-  const [amountText, setAmountText] = useState(existing ? String(existing.amount).replace('.', ',') : '')
+  const [amountText, setAmountText] = useState(existing ? amountToInput(existing.amount) : '')
   const [payer, setPayer] = useState(existing?.paid_by ?? userId)
   const [busy, setBusy] = useState(false)
   const [err, setErr] = useState<string | null>(null)
@@ -162,8 +168,7 @@ function FixedSheet({ fixed, existing, periodId, onClose }: {
   return (
     <Sheet open onClose={onClose} title={fixed.description}>
       <form className="stack" onSubmit={save} style={{ gap: 18 }}>
-        <input className="amount-input num" inputMode="decimal" placeholder="$0" aria-label="Monto" autoFocus
-          value={amountText} onChange={(e) => setAmountText(e.target.value.replace(/[^\d.,-]/g, ''))} />
+        <AmountInput value={amountText} onChange={setAmountText} autoFocus />
         <div className="field">
           <span className="label">Pagó</span>
           <PayerChips members={members} value={payer} onChange={setPayer} meId={userId} />

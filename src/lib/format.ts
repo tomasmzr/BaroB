@@ -61,3 +61,25 @@ export function periodName(month: string | null | undefined, fallbackNumber?: nu
   const t = periodFmt.format(toDate(month.slice(0, 10))).replace(' de ', ' ')
   return t.charAt(0).toUpperCase() + t.slice(1)
 }
+
+/**
+ * Formatea lo que se va tipeando en un campo de monto: "$ 1.234.567,89".
+ * Sin negativos; los puntos de miles los pone la app; la coma (o un punto tipeado al final) es el decimal.
+ */
+export function formatAmountInput(input: string): string {
+  let t = input.replace(/^\$\s?/, '')
+  // Los puntos de miles nunca quedan al final: un punto recién tipeado al final es la coma decimal.
+  if (t.endsWith('.') && !t.includes(',')) t = `${t.slice(0, -1)},`
+  t = t.replace(/[^\d,]/g, '')
+  if (!t) return ''
+  const [int, ...rest] = t.split(',')
+  const intPart = (int.replace(/^0+(?=\d)/, '') || '0').replace(/\B(?=(\d{3})+(?!\d))/g, '.')
+  const hasComma = t.includes(',')
+  const dec = rest.join('').slice(0, 2)
+  return `$ ${intPart}${hasComma ? `,${dec}` : ''}`
+}
+
+/** Número → texto para el campo de monto (para editar algo ya cargado). */
+export function amountToInput(n: number): string {
+  return formatAmountInput(String(Math.abs(n)).replace('.', ','))
+}

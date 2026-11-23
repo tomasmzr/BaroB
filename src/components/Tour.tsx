@@ -113,7 +113,7 @@ const steps: Step[] = [
   {
     target: '[data-tour="chart"]', route: '/history',
     title: 'Historial',
-    body: <>Cada mes cerrado, y el mes en curso (●), con cada categoría como % de los ingresos. Si una barra pasa la línea del 100%, ese mes se gastó más de lo que entró.</>,
+    body: <>Cada mes cerrado, y el mes en curso (●), con cada categoría como % de los ingresos. Si una barra pasa el 100%, ese mes se gastó más de lo que entró.</>,
   },
   {
     target: '[data-tour="split"]', route: '/settings',

@@ -337,3 +337,5 @@ a { color: var(--green); text-decoration: none; }
   animation: bob 1s ease-in-out infinite; pointer-events: none;
 }
 @keyframes bob { 50% { transform: translate(-50%, 8px); } }
+.chip.chip-add { border-style: dashed; color: var(--green); }
+.refund-text { color: var(--green); font-weight: 560; }

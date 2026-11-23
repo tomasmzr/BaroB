@@ -1,44 +1,53 @@
 import { useMemo, useState } from 'react'
 import { Link } from 'react-router-dom'
-import { Bar, BarChart, CartesianGrid, Cell, Legend, ReferenceLine, ResponsiveContainer, Tooltip, XAxis, YAxis } from 'recharts'
+import { Bar, BarChart, CartesianGrid, Cell, Legend, ResponsiveContainer, Tooltip, XAxis, YAxis } from 'recharts'
 import { Icon, Spinner } from '../components/ui'
 import { money, monthLabel, pct, periodName, shortDate } from '../lib/format'
 import type { Summary } from '../lib/types'
-import { useHistory, useOpenPeriod, useSummary } from '../state/data'
+import { useCategories, useHistory, useOpenPeriod, useSummary } from '../state/data'
 import { useGroup } from '../state/session'
-
-const SAVINGS = 'Restante'
 
 export default function History() {
   const { group } = useGroup()
   const history = useHistory()
   const open = useOpenPeriod().data
   const current = useSummary(open?.id).data
+  const { data: cats } = useCategories()
   const [hidden, setHidden] = useState<Set<string>>(new Set())
 
-  // Barras apiladas: cada categoría como % de los ingresos del mes. Si se gastó de más, la pila pasa el 100%.
-  // La última barra es el mes en curso: cómo quedaría si se cerrara ahora.
-  const { data, series } = useMemo(() => {
+  // Barras apiladas: cada categoría como % de los ingresos del mes (si se gastó de más, pasa el 100%).
+  // Las categorías se apilan siempre en el mismo orden (el de la lista de categorías), de abajo hacia arriba.
+  // La última barra (●) es el mes en curso, como quedaría si se cerrara ahora.
+  const { data, series, ticks } = useMemo(() => {
     const months: { label: string; s: Summary; live?: boolean }[] = [...(history.data ?? [])]
       .filter((p) => p.summary).reverse().slice(-11)
       .map((p) => ({ label: monthLabel(p.month ?? p.closed_at!), s: p.summary! }))
     if (open && current) months.push({ label: `${monthLabel(open.month)} ●`, s: current, live: true })
+
+    const order = new Map((cats ?? []).map((c) => [c.name, c.sort]))
     const colors = new Map<string, string>()
+    let top = 100
     const rows = months.map(({ label, s, live }) => {
       const row: Record<string, number | string | boolean> = { label, live: !!live }
       const base = s.total_income || s.total_expenses || 1
+      let sum = 0
       for (const c of s.categories) {
         if (c.total <= 0) continue
         colors.set(c.name, c.color)
-        row[c.name] = Math.round((c.total / base) * 1000) / 10
+        const v = Math.round((c.total / base) * 1000) / 10
+        row[c.name] = v
+        sum += v
       }
-      row[SAVINGS] = s.total_income > 0 ? Math.max(0, Math.round((s.savings / base) * 1000) / 10) : 0
+      top = Math.max(top, sum)
       return row
     })
-    colors.set(SAVINGS, '#94a3b8')
     for (const r of rows) for (const k of colors.keys()) if (!(k in r)) r[k] = 0
-    return { data: rows, series: [...colors.entries()] }
-  }, [history.data, open, current])
+    const series = [...colors.entries()].sort(([a], [b]) =>
+      (order.get(a) ?? 999) - (order.get(b) ?? 999) || a.localeCompare(b, 'es'))
+    const ticks: number[] = []
+    for (let t = 0; t <= Math.ceil(top / 25) * 25; t += 25) ticks.push(t)
+    return { data: rows, series, ticks }
+  }, [history.data, open, current, cats])
 
   if (history.isLoading) return <div className="page"><Spinner /></div>
   const list = history.data ?? []
@@ -52,11 +61,11 @@ export default function History() {
           <div className="small muted" style={{ paddingLeft: 16, marginBottom: 8 }}>Cada categoría como % de los ingresos del mes</div>
           <div style={{ height: 260 }}>
             <ResponsiveContainer>
-              <BarChart data={data} margin={{ left: 0, right: 12 }} barCategoryGap="22%">
+              <BarChart data={data} margin={{ top: 10, left: 0, right: 12 }} barCategoryGap="22%">
                 <CartesianGrid stroke="var(--line)" vertical={false} />
                 <XAxis dataKey="label" tick={{ fill: 'var(--text-3)', fontSize: 11 }} axisLine={false} tickLine={false} />
-                <YAxis unit="%" tick={{ fill: 'var(--text-3)', fontSize: 11 }} axisLine={false} tickLine={false} width={42} />
-                <ReferenceLine y={100} stroke="var(--text-3)" strokeDasharray="4 4" />
+                <YAxis unit="%" ticks={ticks} domain={[0, ticks[ticks.length - 1]]} interval={0}
+                  tick={{ fill: 'var(--text-3)', fontSize: 11 }} axisLine={false} tickLine={false} width={42} />
                 <Tooltip
                   cursor={{ fill: 'var(--surface-2)', opacity: 0.4 }}
                   formatter={(v) => `${v}%`}
@@ -70,14 +79,14 @@ export default function History() {
                   }} />
                 {series.map(([name, color]) => (
                   <Bar key={name} dataKey={name} stackId="m" fill={color} hide={hidden.has(name)} isAnimationActive={false}>
-                    {data.map((d, i) => <Cell key={i} fillOpacity={(name === SAVINGS ? 0.3 : 1) * (d.live ? 0.55 : 1)} />)}
+                    {data.map((d, i) => <Cell key={i} fillOpacity={d.live ? 0.55 : 1} />)}
                   </Bar>
                 ))}
               </BarChart>
             </ResponsiveContainer>
           </div>
           <div className="tiny faint" style={{ paddingLeft: 16 }}>
-            ● = mes en curso, como quedaría si se cerrara ahora. La línea punteada es el 100% de los ingresos. Tocá una categoría para ocultarla.
+            ● = mes en curso, como quedaría si se cerrara ahora. Si una barra pasa el 100%, ese mes se gastó más de lo que entró. Tocá una categoría para ocultarla.
           </div>
         </div>
       )}
@@ -97,7 +106,7 @@ export default function History() {
                 {p.summary && (
                   <div style={{ textAlign: 'right' }}>
                     <div className="amount">{money(p.summary.total_expenses, group.currency)}</div>
-                    <div className={`meta ${p.summary.savings < 0 ? 'over-text' : ''}`}>{p.summary.savings < 0 ? `Excedido ${pct(-p.summary.savings, p.summary.total_income)}` : `Quedó ${pct(p.summary.savings, p.summary.total_income)}`}</div>
+                    <div className={`meta ${p.summary.savings < 0 ? 'over-text' : ''}`}>{p.summary.total_income > 0 ? `${pct(p.summary.total_expenses, p.summary.total_income)} de los ingresos` : ''}</div>
                   </div>
                 )}
                 <Icon name="chevron" size={18} />

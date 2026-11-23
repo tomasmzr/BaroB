@@ -6,7 +6,7 @@ export interface Profile {
   email: string | null
 }
 
-export type SplitMode = 'proportional' | 'proportional_capped' | 'equal' | 'fixed'
+export type SplitMode = 'proportional' | 'proportional_capped' | 'equal' | 'fixed' | 'none'
 
 export interface Group {
   id: UUID
@@ -114,6 +114,9 @@ export interface Summary {
   categories: { category_id: UUID | null; name: string; color: string; total: number }[]
   installments: { plan_id: UUID; description: string; paid_by: UUID; number: number; of: number; amount: number }[]
   settlements: { from: UUID; to: UUID; amount: number }[]
+  /** devoluciones / reintegros (en positivo), ya descontados de sus categorías */
+  refunds_total?: number
+  refunds?: { category_id: UUID | null; name: string; color: string; total: number }[]
 }
 
 export interface Blockers {

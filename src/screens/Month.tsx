@@ -53,9 +53,10 @@ export default function Month() {
   const [editingPlan, setEditingPlan] = useState<InstallmentPlan | null>(null)
   const [incomeSheet, setIncomeSheet] = useState<{ userId: string; income?: Income } | null>(null)
 
+  const refunds = useMemo(() => (expenses.data ?? []).filter((e) => e.amount < 0), [expenses.data])
   const byDay = useMemo(() => {
     const out: [string, Expense[]][] = []
-    for (const e of expenses.data ?? []) {
+    for (const e of (expenses.data ?? []).filter((x) => x.amount >= 0)) {
       const last = out[out.length - 1]
       if (last && last[0] === e.spent_at) last[1].push(e)
       else out.push([e.spent_at, [e]])
@@ -79,7 +80,9 @@ export default function Month() {
   const fixedTotal = fixed.data?.length ?? 0
   const cur = group.currency
   const pname = periodName(period.data.month, period.data.number)
-  const equal = group.split_mode === 'equal'
+  const noSplit = group.split_mode === 'none'
+  // en estos modos los ingresos no definen el reparto
+  const equal = group.split_mode === 'equal' || group.split_mode === 'fixed' || noSplit
 
   return (
     <div className="page">
@@ -98,9 +101,11 @@ export default function Month() {
         <div className="stats">
           <div className="stat"><div className="label">Ingresos</div><div className="value">{money(s?.total_income ?? 0, cur)}</div></div>
           <div className="stat"><div className="label">Pusiste</div><div className="value">{money(me?.paid ?? 0, cur)}</div></div>
-          <div className="stat"><div className="label">Te toca</div><div className="value">{money(me?.share ?? 0, cur)}</div></div>
+          {noSplit
+            ? <div className="stat"><div className="label">Tu parte</div><div className="value">{pct(me?.ratio ?? 0, 1)}</div></div>
+            : <div className="stat"><div className="label">Te toca</div><div className="value">{money(me?.share ?? 0, cur)}</div></div>}
         </div>
-        {me && s && Math.abs(me.balance) >= 0.01 && (s.total_income > 0 || equal) && (
+        {!noSplit && me && s && Math.abs(me.balance) >= 0.01 && (s.total_income > 0 || equal) && (
           <div className={`badge ${me.balance > 0 ? 'ok' : 'warn'}`} style={{ marginTop: 12 }}>
             {me.balance > 0 ? `Te tienen que devolver ${money(me.balance, cur)}` : `Te falta poner ${money(-me.balance, cur)}`}
           </div>
@@ -126,7 +131,7 @@ export default function Month() {
       </Link>
 
       {/* Ingresos */}
-      <div className="section-title" data-tour="incomes">Ingresos{equal && <span className="faint" style={{ textTransform: 'none', fontWeight: 400 }}> · opcionales (división equitativa)</span>}</div>
+      <div className="section-title" data-tour="incomes">Ingresos{equal && <span className="faint" style={{ textTransform: 'none', fontWeight: 400 }}> · opcionales</span>}</div>
       <div className="stack" style={{ gap: 8 }}>
         {members.map((m) => {
           const list = incomesByUser.get(m.user_id) ?? []
@@ -216,7 +221,28 @@ export default function Month() {
         ))
       )}
 
-      <Sheet open={!!editing} onClose={() => setEditing(null)} title={editing?.fixed_expense_id ? 'Gasto fijo' : 'Editar gasto'}>
+      {refunds.length > 0 && (
+        <>
+          <div className="section-title">Devoluciones y reintegros</div>
+          <div className="list">
+            {refunds.map((e) => {
+              const cat = e.category_id ? byId.get(e.category_id) : undefined
+              return (
+                <button className="item" key={e.id} onClick={() => setEditing(e)}>
+                  <span className="dot" style={{ background: cat?.color ?? 'var(--text-3)' }} />
+                  <div className="grow">
+                    <div className="title ellipsis">{e.description}</div>
+                    <div className="meta">{shortDate(e.spent_at)} · {cat?.name ?? 'Sin categoría'} · {name(e.paid_by, { me: true })}</div>
+                  </div>
+                  <span className="amount refund-text">−{money(-e.amount, cur)}</span>
+                </button>
+              )
+            })}
+          </div>
+        </>
+      )}
+
+      <Sheet open={!!editing} onClose={() => setEditing(null)} title={editing?.fixed_expense_id ? 'Gasto fijo' : editing && editing.amount < 0 ? 'Editar devolución' : 'Editar gasto'}>
         {editing && <ExpenseForm key={editing.id} mode="edit-expense" expense={editing} onDone={() => setEditing(null)} />}
       </Sheet>
       <Sheet open={!!editingPlan} onClose={() => setEditingPlan(null)} title="Gasto en cuotas">

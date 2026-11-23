@@ -1,20 +1,17 @@
 import { useMemo, useRef, useState, type FormEvent } from 'react'
-import { installmentAmount, money, parseAmount, todayISO } from '../lib/format'
+import { amountToInput, installmentAmount, money, parseAmount, todayISO } from '../lib/format'
 import { notify } from '../lib/push'
 import { errorText, supabase } from '../lib/supabase'
 import type { Expense, InstallmentPlan } from '../lib/types'
 import { useCategories, useInvalidate, useMembers, useOpenPeriod, useRecentDescriptions } from '../state/data'
 import { useGroup } from '../state/session'
-import { CategoryChips, PayerChips, Stepper, Switch, useToast } from './ui'
+import { CategorySheet } from './CatalogSheets'
+import { AmountInput, CategoryChips, PayerChips, Stepper, Switch, useToast } from './ui'
 
 type Props =
   | { mode: 'add'; onDone: () => void }
   | { mode: 'edit-expense'; expense: Expense; onDone: () => void }
   | { mode: 'edit-plan'; plan: InstallmentPlan; onDone: () => void }
-
-function fmtInput(n: number): string {
-  return String(n).replace('.', ',')
-}
 
 export default function ExpenseForm(props: Props) {
   const { group, userId } = useGroup()
@@ -30,8 +27,11 @@ export default function ExpenseForm(props: Props) {
   const plan = props.mode === 'edit-plan' ? props.plan : null
 
   const [amountText, setAmountText] = useState(
-    exp ? fmtInput(exp.amount) : plan ? fmtInput(plan.total_amount) : '',
+    exp ? amountToInput(exp.amount) : plan ? amountToInput(plan.total_amount) : '',
   )
+  // Devolución / reintegro: se guarda como monto negativo y resta en su categoría.
+  const [isRefund, setIsRefund] = useState(!!exp && exp.amount < 0)
+  const [newCat, setNewCat] = useState(false)
   const [description, setDescription] = useState(exp?.description ?? plan?.description ?? '')
   const [categoryId, setCategoryId] = useState<string | null>(exp?.category_id ?? plan?.category_id ?? null)
   const [payer, setPayer] = useState(exp?.paid_by ?? plan?.paid_by ?? userId)
@@ -43,7 +43,8 @@ export default function ExpenseForm(props: Props) {
   const [focusDesc, setFocusDesc] = useState(false)
   const descRef = useRef<HTMLInputElement>(null)
 
-  const amount = parseAmount(amountText)
+  const parsed = parseAmount(amountText)
+  const amount = parsed === null ? null : isRefund ? -Math.abs(parsed) : Math.abs(parsed)
   const isFixed = !!exp?.fixed_expense_id
   const minCount = plan ? Math.max(1, plan.installments_paid + 1) : 2
 
@@ -82,7 +83,7 @@ export default function ExpenseForm(props: Props) {
     try {
       if (props.mode === 'add') {
         if (!period) throw new Error('No hay un mes abierto.')
-        if (inInstallments && count > 1) {
+        if (inInstallments && count > 1 && !isRefund) {
           const { data, error } = await supabase.from('installment_plans').insert({
             group_id: group.id, description: description.trim(), category_id: categoryId, paid_by: payer,
             total_amount: amount, installments_total: count, spent_at: date,
@@ -97,7 +98,7 @@ export default function ExpenseForm(props: Props) {
           }).select('id').single()
           if (error) throw error
           notify({ type: 'expense', id: data.id })
-          toast('Gasto guardado')
+          toast(isRefund ? 'Devolución guardada' : 'Gasto guardado')
         }
       } else if (exp) {
         const patch = isFixed ? { amount, paid_by: payer, spent_at: date }
@@ -139,17 +140,9 @@ export default function ExpenseForm(props: Props) {
   return (
     <form onSubmit={submit} className="stack" style={{ gap: 18 }}>
       <div>
-        <input
-          className="amount-input num"
-          inputMode="decimal"
-          placeholder="$0"
-          aria-label="Monto"
-          autoFocus={props.mode === 'add'}
-          value={amountText}
-          onChange={(e) => setAmountText(e.target.value.replace(/[^\d.,-]/g, ''))}
-        />
-        {amount !== null && amount < 0 && (
-          <p className="small muted" style={{ textAlign: 'center', margin: 0 }}>Monto negativo: devolución o compensación</p>
+        <AmountInput value={amountText} onChange={setAmountText} autoFocus={props.mode === 'add'} />
+        {isRefund && (
+          <p className="small refund-text" style={{ textAlign: 'center', margin: 0 }}>Devolución / reintegro: resta en su categoría</p>
         )}
         <input
           ref={descRef}
@@ -176,16 +169,28 @@ export default function ExpenseForm(props: Props) {
       {!isFixed && (
         <div className="field">
           <span className="label">Categoría</span>
-          <CategoryChips categories={cats} value={categoryId} onChange={setCategoryId} />
+          <CategoryChips categories={cats} value={categoryId} onChange={setCategoryId} onAdd={() => setNewCat(true)} />
         </div>
       )}
 
       <div className="field">
-        <span className="label">Pagó</span>
+        <span className="label">{isRefund ? 'Lo recibió' : 'Pagó'}</span>
         <PayerChips members={members} value={payer} onChange={setPayer} meId={userId} />
       </div>
 
-      {(props.mode === 'add' || plan) && (
+      {!isFixed && !plan && (
+        <div className="card" style={{ padding: 12 }}>
+          <div className="between">
+            <div>
+              <div style={{ fontWeight: 560 }}>Es una devolución o reintegro</div>
+              <div className="small faint">Plata que vuelve: resta en la categoría elegida</div>
+            </div>
+            <Switch checked={isRefund} onChange={(v) => { setIsRefund(v); if (v) setInInstallments(false) }} label="Devolución o reintegro" />
+          </div>
+        </div>
+      )}
+
+      {((props.mode === 'add' && !isRefund) || plan) && (
         <div className="card" style={{ padding: 12 }}>
           <div className="between">
             <div>
@@ -217,7 +222,7 @@ export default function ExpenseForm(props: Props) {
 
       {(
         <div className="between">
-          <span className="label">{inInstallments ? 'Fecha de compra' : 'Fecha'}</span>
+          <span className="label">{inInstallments ? 'Fecha de compra' : isRefund ? 'Fecha de la devolución' : 'Fecha'}</span>
           <input type="date" className="input" style={{ width: 'auto', height: 40 }} value={date}
             max={todayISO()} onChange={(e) => setDate(e.target.value || todayISO())} />
         </div>
@@ -231,6 +236,7 @@ export default function ExpenseForm(props: Props) {
       {props.mode !== 'add' && !isFixed && (
         <button type="button" className="btn ghost danger block" onClick={remove} disabled={busy}>Eliminar</button>
       )}
+      {newCat && <CategorySheet cat="new" onClose={() => setNewCat(false)} onSaved={(id) => setCategoryId(id)} />}
     </form>
   )
 }
